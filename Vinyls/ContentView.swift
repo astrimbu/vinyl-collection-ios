@@ -12,6 +12,12 @@ struct ContentView: View {
     @State private var showingImportCSVSheet = false
     @State private var searchText = ""
     @State private var sortOption = SortOption.artistAsc
+    @State private var viewMode = ViewMode.grid
+    
+    enum ViewMode {
+        case list
+        case grid
+    }
     
     enum SortOption: String, CaseIterable, Identifiable {
         case artistAsc = "Artist (A-Z)"
@@ -89,51 +95,54 @@ struct ContentView: View {
                 .cornerRadius(10)
                 .padding(.horizontal)
                 
-                // Sort menu
-                Picker("Sort by", selection: $sortOption) {
-                    ForEach(SortOption.allCases) { option in
-                        Text(option.rawValue).tag(option)
+                // Sort and View Mode Controls
+                HStack {
+                    Picker("Sort by", selection: $sortOption) {
+                        ForEach(SortOption.allCases) { option in
+                            Text(option.rawValue).tag(option)
+                        }
                     }
-                }
-                .pickerStyle(MenuPickerStyle())
-                .onChange(of: sortOption) { oldValue, newValue in
-                    updateFetchRequest()
+                    .pickerStyle(MenuPickerStyle())
+                    .onChange(of: sortOption) { oldValue, newValue in
+                        updateFetchRequest()
+                    }
+                    
+                    Spacer()
+                    
+                    Button(action: {
+                        viewMode = viewMode == .list ? .grid : .list
+                    }) {
+                        Image(systemName: viewMode == .list ? "square.grid.2x2" : "list.bullet")
+                            .imageScale(.large)
+                    }
                 }
                 .padding(.horizontal)
                 
-                // Records list
-                List {
-                    ForEach(items) { item in
-                        NavigationLink {
-                            RecordDetailView(item: item)
-                        } label: {
-                            HStack {
-                                if item.coverArtURL != "" {
-                                    AsyncImage(url: URL(string: item.coverArtURL ?? "")) { image in
-                                        image.resizable()
-                                    } placeholder: {
-                                        Color.gray
-                                    }
-                                    .frame(width: 50, height: 50)
-                                    .cornerRadius(4)
-                                } else {
-                                    Image(systemName: "music.note")
-                                        .frame(width: 50, height: 50)
-                                        .background(Color.gray.opacity(0.2))
-                                        .cornerRadius(4)
-                                }
-                                
-                                VStack(alignment: .leading) {
-                                    Text(item.artist ?? "Unknown Artist")
-                                        .font(.headline)
-                                    Text(item.albumTitle ?? "Unknown Album")
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
+                // Records view
+                Group {
+                    if viewMode == .list {
+                        List {
+                            ForEach(items) { item in
+                                NavigationLink {
+                                    RecordDetailView(item: item)
+                                } label: {
+                                    RecordRowView(item: item)
                                 }
                             }
+                            .onDelete(perform: deleteItems)
+                        }
+                    } else {
+                        ScrollView {
+                            LazyVGrid(columns: [
+                                GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 16)
+                            ], spacing: 16) {
+                                ForEach(items) { item in
+                                    RecordGridItemView(item: item)
+                                }
+                            }
+                            .padding()
                         }
                     }
-                    .onDelete(perform: deleteItems)
                 }
             }
             .toolbar {
@@ -324,6 +333,95 @@ struct AddRecordView: View {
                 print("Unresolved error \(nsError), \(nsError.userInfo)")
             }
         }
+    }
+}
+
+// Extract record row view into a separate component
+struct RecordRowView: View {
+    let item: Item
+    
+    var body: some View {
+        HStack {
+            if item.coverArtURL != "" {
+                AsyncImage(url: URL(string: item.coverArtURL ?? "")) { image in
+                    image.resizable()
+                } placeholder: {
+                    Color.gray
+                }
+                .frame(width: 50, height: 50)
+                .cornerRadius(4)
+            } else {
+                Image(systemName: "music.note")
+                    .frame(width: 50, height: 50)
+                    .background(Color.gray.opacity(0.2))
+                    .cornerRadius(4)
+            }
+            
+            VStack(alignment: .leading) {
+                Text(item.artist ?? "Unknown Artist")
+                    .font(.headline)
+                Text(item.albumTitle ?? "Unknown Album")
+                    .font(.subheadline)
+                    .foregroundColor(.secondary)
+            }
+        }
+    }
+}
+
+// Update grid item view component with overlay
+struct RecordGridItemView: View {
+    let item: Item
+    
+    var body: some View {
+        NavigationLink {
+            RecordDetailView(item: item)
+        } label: {
+            VStack {
+                ZStack(alignment: .bottom) {
+                    if item.coverArtURL != "" {
+                        AsyncImage(url: URL(string: item.coverArtURL ?? "")) { image in
+                            image.resizable()
+                        } placeholder: {
+                            Color.gray
+                        }
+                        .aspectRatio(1, contentMode: .fill)
+                    } else {
+                        Image(systemName: "music.note")
+                            .font(.system(size: 40))
+                            .frame(maxWidth: .infinity)
+                            .aspectRatio(1, contentMode: .fill)
+                            .background(Color.gray.opacity(0.2))
+                    }
+                    
+                    // Text overlay with gradient background
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(item.artist ?? "Unknown Artist")
+                            .font(.subheadline)
+                            .fontWeight(.semibold)
+                            .lineLimit(1)
+                        Text(item.albumTitle ?? "Unknown Album")
+                            .font(.caption)
+                            .lineLimit(1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(
+                        LinearGradient(
+                            gradient: Gradient(colors: [
+                                Color.black.opacity(0.7),
+                                Color.black.opacity(0.3)
+                            ]),
+                            startPoint: .bottom,
+                            endPoint: .top
+                        )
+                    )
+                    .foregroundColor(.white)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .shadow(radius: 2)
+        }
+        .buttonStyle(PlainButtonStyle())
     }
 }
 
