@@ -1,54 +1,75 @@
-# Vinyl Collection iOS App
+# Vinyl Collection Manager for iOS
 
-An iOS application for managing and tracking your vinyl record collection. This is the mobile companion to the vinyl-collection project, built with Swift and SwiftUI.
+A beautiful iOS app to manage your vinyl record collection.
 
 ## Features
 
-- Browse your vinyl collection
-- View detailed information about each record
-- Track record details including:
-  - Artist name
-  - Album title
-  - Pressing information
-  - Release details
-  - Notes and condition
-  - Weight
-  - Duplicate status
+- Browse and manage your vinyl collection
+- Integration with Discogs API for album artwork and track information
+- Beautiful modern UI with iOS design guidelines
+- Track listing support
+- Album artwork display
 
-## Requirements
+## Setup
 
-- iOS 16.0+
-- Xcode 15.0+
-- Swift 5.9+
+### Prerequisites
 
-## Installation
+- Xcode 14.0 or later
+- iOS 15.0 or later
+- A Discogs API token
 
-1. Clone the repository:
-```bash
-git clone https://github.com/[your-username]/vinyl-collection-ios.git
-cd vinyl-collection-ios
-```
+### Environment Setup
 
-2. Open the project in Xcode:
-```bash
-open Vinyls.xcodeproj
-```
+1. Copy the `.env.example` file to `.env`:
+   ```bash
+   cp .env.example .env
+   ```
 
-3. Build and run the project in Xcode using ⌘+R
+2. Add your Discogs API token to the `.env` file:
+   ```
+   DISCOGS_API_TOKEN=your_token_here
+   ```
 
-## Project Structure
+   You can obtain a Discogs API token by:
+   1. Creating a Discogs account at https://www.discogs.com
+   2. Going to your Developer settings
+   3. Generating a new token
 
-- `Vinyls/` - Main application source code
-- `VinylsTests/` - Unit tests
-- `VinylsUITests/` - UI tests
+### Building the Project
+
+1. Open `Vinyls.xcodeproj` in Xcode
+2. Select your target device or simulator
+3. Build and run (⌘R)
+
+## Architecture
+
+The app follows modern iOS development practices:
+
+- SwiftUI for the user interface
+- Async/await for network operations
+- MVVM architecture
+- Discogs API integration for metadata
+
+## Discogs Integration
+
+The app integrates with the Discogs API to fetch:
+- Album artwork
+- Track listings
+- Release information
+
+Rate limiting is handled automatically (60 requests per minute).
 
 ## Contributing
 
-Feel free to open issues or submit pull requests if you have suggestions for improvements.
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a new Pull Request
 
 ## License
 
-This project is open source and available under the MIT License.
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## Related Projects
 

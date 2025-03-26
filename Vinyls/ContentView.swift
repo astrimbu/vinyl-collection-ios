@@ -6,6 +6,9 @@
 import SwiftUI
 import CoreData
 
+// @_exported import struct DiscogsClient.DiscogsTrack
+// @_exported import class DiscogsService.DiscogsService
+
 struct ContentView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @State private var showingAddRecordSheet = false
@@ -193,12 +196,21 @@ struct ContentView: View {
 
 struct RecordDetailView: View {
     let item: Item
+    @StateObject private var discogsService = DiscogsService()
+    @State private var tracks: [DiscogsTrack] = []
+    @State private var currentArtworkURL: String = ""
+    
+    init(item: Item) {
+        print("🎵 RecordDetailView init called for: \(item.artist ?? "") - \(item.albumTitle ?? "")")
+        self.item = item
+        _currentArtworkURL = State(initialValue: item.coverArtURL ?? "")
+    }
     
     var body: some View {
         ScrollView {
             VStack(alignment: .center, spacing: 20) {
-                if item.coverArtURL != "" {
-                    AsyncImage(url: URL(string: item.coverArtURL ?? "")) { image in
+                if currentArtworkURL != "" {
+                    AsyncImage(url: URL(string: currentArtworkURL)) { image in
                         image.resizable()
                     } placeholder: {
                         Color.gray
@@ -251,10 +263,85 @@ struct RecordDetailView: View {
                 }
                 .padding()
                 .frame(maxWidth: .infinity, alignment: .leading)
+                
+                if !tracks.isEmpty {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("Tracks")
+                            .font(.headline)
+                            .padding(.horizontal)
+                        
+                        ForEach(tracks, id: \.position) { track in
+                            HStack {
+                                Text(track.position)
+                                    .foregroundColor(.secondary)
+                                    .frame(width: 30, alignment: .leading)
+                                Text(track.title)
+                                Spacer()
+                                if !track.duration.isEmpty {
+                                    Text(track.duration)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            .padding(.horizontal)
+                            
+                            Divider()
+                                .padding(.horizontal)
+                        }
+                    }
+                }
             }
             .padding()
         }
         .navigationTitle(item.albumTitle ?? "Record Details")
+        .navigationBarItems(trailing: Button(action: {
+            print("🔄 Refresh button tapped")
+            Task {
+                await refreshDiscogsData(forceRefresh: true)
+            }
+        }) {
+            Image(systemName: "arrow.clockwise")
+        })
+        .task {
+            print("👁️ RecordDetailView appeared, checking if Discogs data needed")
+            await refreshDiscogsData(forceRefresh: false)
+        }
+    }
+    
+    private func refreshDiscogsData(forceRefresh: Bool) async {
+        print("🔍 Checking Discogs data for: \(item.artist ?? "") - \(item.albumTitle ?? "")")
+        guard let artist = item.artist, let title = item.albumTitle else { return }
+        
+        // Skip API call if we already have both artwork and tracks, unless forced
+        if !forceRefresh && currentArtworkURL != "" && !tracks.isEmpty {
+            print("⏭️ Skipping Discogs API call - data already present")
+            return
+        }
+        
+        let (artworkUrl, fetchedTracks) = await discogsService.fetchAlbumDetails(
+            artist: artist,
+            title: title
+        )
+        
+        print("📥 Got Discogs data - artwork: \(artworkUrl?.absoluteString ?? "none"), tracks: \(fetchedTracks.count)")
+        
+        // Update the tracks if we got any
+        if !fetchedTracks.isEmpty {
+            tracks = fetchedTracks
+        }
+        
+        // Update artwork URL if we got one from Discogs
+        if let artworkUrl = artworkUrl {
+            // Update both the local state and Core Data
+            currentArtworkURL = artworkUrl.absoluteString
+            
+            if let context = item.managedObjectContext {
+                await context.perform {
+                    item.coverArtURL = artworkUrl.absoluteString
+                    try? context.save()
+                    print("💾 Updated cover art URL in Core Data")
+                }
+            }
+        }
     }
 }
 
@@ -338,7 +425,7 @@ struct AddRecordView: View {
 
 // Extract record row view into a separate component
 struct RecordRowView: View {
-    let item: Item
+    @ObservedObject var item: Item
     
     var body: some View {
         HStack {
@@ -370,7 +457,7 @@ struct RecordRowView: View {
 
 // Update grid item view component with overlay
 struct RecordGridItemView: View {
-    let item: Item
+    @ObservedObject var item: Item
     
     var body: some View {
         NavigationLink {
