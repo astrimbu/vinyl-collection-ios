@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct ImportCSVView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.dismiss) private var dismiss
+    @StateObject private var discogsService = DiscogsService.shared
     
     @State private var isImporting = false
     @State private var importedCount = 0
@@ -62,21 +63,23 @@ struct ImportCSVView: View {
                 allowedContentTypes: [.delimitedText, .text],
                 allowsMultipleSelection: false
             ) { result in
-                do {
-                    guard let selectedFile: URL = try result.get().first else { return }
-                    
-                    if selectedFile.startAccessingSecurityScopedResource() {
-                        defer { selectedFile.stopAccessingSecurityScopedResource() }
+                Task {
+                    do {
+                        guard let selectedFile: URL = try result.get().first else { return }
                         
-                        let data = try String(contentsOf: selectedFile, encoding: .utf8)
-                        importCSVData(data)
-                    } else {
-                        errorMessage = "Failed to access the file"
+                        if selectedFile.startAccessingSecurityScopedResource() {
+                            defer { selectedFile.stopAccessingSecurityScopedResource() }
+                            
+                            let data = try String(contentsOf: selectedFile, encoding: .utf8)
+                            await importCSVData(data)
+                        } else {
+                            errorMessage = "Failed to access the file"
+                            isShowingResult = true
+                        }
+                    } catch {
+                        errorMessage = "Error importing file: \(error.localizedDescription)"
                         isShowingResult = true
                     }
-                } catch {
-                    errorMessage = "Error importing file: \(error.localizedDescription)"
-                    isShowingResult = true
                 }
             }
             .alert(isPresented: $isShowingResult) {
@@ -89,7 +92,7 @@ struct ImportCSVView: View {
                 } else {
                     return Alert(
                         title: Text("Import Successful"),
-                        message: Text("Successfully imported \(importedCount) vinyl records"),
+                        message: Text("Successfully imported \(importedCount) vinyl records. Discogs data will be fetched in the background."),
                         dismissButton: .default(Text("OK")) {
                             dismiss()
                         }
@@ -99,7 +102,7 @@ struct ImportCSVView: View {
         }
     }
     
-    private func importCSVData(_ csvString: String) {
+    private func importCSVData(_ csvString: String) async {
         let rows = csvString.components(separatedBy: .newlines)
         guard rows.count > 1 else {
             errorMessage = "CSV file is empty or invalid"
@@ -133,8 +136,9 @@ struct ImportCSVView: View {
         
         // Start from index 1 to skip headers
         importedCount = 0
+        var importedItems: [Item] = []
         
-        viewContext.perform {
+        await viewContext.perform {
             for i in 1..<rows.count {
                 let rowString = rows[i]
                 if rowString.isEmpty { continue }
@@ -179,16 +183,57 @@ struct ImportCSVView: View {
                     }
                 }
                 
+                importedItems.append(newItem)
                 importedCount += 1
             }
             
             do {
                 try viewContext.save()
+                
+                // Start background fetch of Discogs data
+                Task(priority: .background) {
+                    await fetchDiscogsDataInBackground(for: importedItems)
+                }
+                
+                // Show success message and dismiss
                 isShowingResult = true
             } catch {
                 errorMessage = "Failed to save imported data: \(error.localizedDescription)"
                 isShowingResult = true
             }
+        }
+    }
+    
+    private func fetchDiscogsDataInBackground(for items: [Item]) async {
+        guard !items.isEmpty else { return }
+        
+        for item in items {
+            // Fetch Discogs data
+            let (artworkUrl, tracks) = await discogsService.fetchAlbumDetails(
+                artist: item.artist ?? "",
+                title: item.albumTitle ?? ""
+            )
+            
+            // Update the item with fetched data
+            await viewContext.perform {
+                if let artworkUrl = artworkUrl {
+                    item.coverArtURL = artworkUrl.absoluteString
+                }
+                
+                if !tracks.isEmpty {
+                    do {
+                        let tracksData = try JSONEncoder().encode(tracks)
+                        item.tracklist = tracksData
+                    } catch {
+                        print("Failed to encode tracks data: \(error)")
+                    }
+                }
+                
+                try? viewContext.save()
+            }
+            
+            // Respect rate limits by waiting between requests
+            try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second delay between requests
         }
     }
     

@@ -2,7 +2,7 @@ import SwiftUI
 import OSLog
 
 struct AddAlbumView: View {
-    @StateObject private var discogsService = DiscogsService()
+    @StateObject private var discogsService = DiscogsService.shared
     @Environment(\.dismiss) private var dismiss
     private let logger = Logger(subsystem: "com.vinyls.app", category: "AddAlbum")
     
@@ -18,13 +18,13 @@ struct AddAlbumView: View {
             Form {
                 Section(header: Text("Album Details")) {
                     TextField("Artist", text: $artist)
-                        .onChange(of: artist) { _ in
-                            logger.debug("Artist changed to: \(artist)")
+                        .onChange(of: artist) { oldValue, newValue in
+                            logger.debug("Artist changed to: \(newValue)")
                             debounceSearch()
                         }
                     TextField("Album Title", text: $title)
-                        .onChange(of: title) { _ in
-                            logger.debug("Title changed to: \(title)")
+                        .onChange(of: title) { oldValue, newValue in
+                            logger.debug("Title changed to: \(newValue)")
                             debounceSearch()
                         }
                     

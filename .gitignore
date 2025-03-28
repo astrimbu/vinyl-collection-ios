@@ -38,11 +38,11 @@ DerivedData/
 Packages/
 Package.pins
 Package.resolved
-*.xcodeproj
 
 # CocoaPods
 Pods/
 *.xcworkspace
+!*.xcodeproj/project.xcworkspace
 
 # Carthage
 Carthage/Build/

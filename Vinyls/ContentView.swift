@@ -13,6 +13,7 @@ struct ContentView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @State private var showingAddRecordSheet = false
     @State private var showingImportCSVSheet = false
+    @State private var showingDeleteAllConfirmation = false
     @State private var searchText = ""
     @State private var sortOption = SortOption.artistAsc
     @State private var viewMode = ViewMode.grid
@@ -158,8 +159,15 @@ struct ContentView: View {
                     }
                 }
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: { showingImportCSVSheet = true }) {
-                        Label("Import CSV", systemImage: "square.and.arrow.down")
+                    Menu {
+                        Button(action: { showingImportCSVSheet = true }) {
+                            Label("Import CSV", systemImage: "square.and.arrow.down")
+                        }
+                        Button(role: .destructive, action: { showingDeleteAllConfirmation = true }) {
+                            Label("Delete All Records", systemImage: "trash")
+                        }
+                    } label: {
+                        Label("More", systemImage: "ellipsis.circle")
                     }
                 }
             }
@@ -174,6 +182,14 @@ struct ContentView: View {
         .sheet(isPresented: $showingImportCSVSheet) {
             ImportCSVView()
                 .environment(\.managedObjectContext, viewContext)
+        }
+        .alert("Delete All Records?", isPresented: $showingDeleteAllConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete All", role: .destructive) {
+                deleteAllItems()
+            }
+        } message: {
+            Text("This action cannot be undone. Are you sure you want to delete all records in your collection?")
         }
         .onAppear {
             updateFetchRequest()
@@ -192,11 +208,24 @@ struct ContentView: View {
             }
         }
     }
+
+    private func deleteAllItems() {
+        withAnimation {
+            items.forEach(viewContext.delete)
+            
+            do {
+                try viewContext.save()
+            } catch {
+                let nsError = error as NSError
+                fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
+            }
+        }
+    }
 }
 
 struct RecordDetailView: View {
     let item: Item
-    @StateObject private var discogsService = DiscogsService()
+    @StateObject private var discogsService = DiscogsService.shared
     @State private var tracks: [DiscogsTrack] = []
     @State private var currentArtworkURL: String = ""
     
@@ -308,15 +337,24 @@ struct RecordDetailView: View {
     }
     
     private func refreshDiscogsData(forceRefresh: Bool) async {
-        print("🔍 Checking Discogs data for: \(item.artist ?? "") - \(item.albumTitle ?? "")")
         guard let artist = item.artist, let title = item.albumTitle else { return }
         
-        // Skip API call if we already have both artwork and tracks, unless forced
-        if !forceRefresh && currentArtworkURL != "" && !tracks.isEmpty {
-            print("⏭️ Skipping Discogs API call - data already present")
-            return
+        // Check for complete local data first
+        if !forceRefresh {
+            let hasStoredArtwork = item.coverArtURL != nil && !item.coverArtURL!.isEmpty
+            let hasStoredTracks = item.tracklist != nil && 
+                (try? JSONDecoder().decode([DiscogsTrack].self, from: item.tracklist!)) != nil
+            
+            if hasStoredArtwork && hasStoredTracks {
+                print("📦 Using stored local data for: \(artist) - \(title)")
+                currentArtworkURL = item.coverArtURL!
+                tracks = try! JSONDecoder().decode([DiscogsTrack].self, from: item.tracklist!)
+                return
+            }
         }
         
+        // If we get here, we need to fetch from Discogs
+        print("🔍 Fetching Discogs data for: \(artist) - \(title)")
         let (artworkUrl, fetchedTracks) = await discogsService.fetchAlbumDetails(
             artist: artist,
             title: title
@@ -327,6 +365,20 @@ struct RecordDetailView: View {
         // Update the tracks if we got any
         if !fetchedTracks.isEmpty {
             tracks = fetchedTracks
+            
+            // Store tracks in Core Data
+            if let context = item.managedObjectContext {
+                await context.perform {
+                    do {
+                        let tracksData = try JSONEncoder().encode(fetchedTracks)
+                        item.tracklist = tracksData
+                        try? context.save()
+                        print("💾 Updated tracks data in Core Data")
+                    } catch {
+                        print("❌ Failed to encode tracks data: \(error)")
+                    }
+                }
+            }
         }
         
         // Update artwork URL if we got one from Discogs
@@ -429,7 +481,22 @@ struct RecordRowView: View {
     
     var body: some View {
         HStack {
-            if item.coverArtURL != "" {
+            if item.coverArtURL == nil {
+                Image(systemName: "music.note")
+                    .frame(width: 50, height: 50)
+                    .background(Color.gray.opacity(0.2))
+                    .cornerRadius(4)
+                    .overlay {
+                        if item.coverArtURL == "" {
+                            ProgressView()
+                                .progressViewStyle(.circular)
+                        }
+                    }
+            } else if item.coverArtURL == "" {
+                ProgressView()
+                    .progressViewStyle(.circular)
+                    .frame(width: 50, height: 50)
+            } else {
                 AsyncImage(url: URL(string: item.coverArtURL ?? "")) { image in
                     image.resizable()
                 } placeholder: {
@@ -437,11 +504,6 @@ struct RecordRowView: View {
                 }
                 .frame(width: 50, height: 50)
                 .cornerRadius(4)
-            } else {
-                Image(systemName: "music.note")
-                    .frame(width: 50, height: 50)
-                    .background(Color.gray.opacity(0.2))
-                    .cornerRadius(4)
             }
             
             VStack(alignment: .leading) {
@@ -465,19 +527,31 @@ struct RecordGridItemView: View {
         } label: {
             VStack {
                 ZStack(alignment: .bottom) {
-                    if item.coverArtURL != "" {
+                    if item.coverArtURL == nil {
+                        Image(systemName: "music.note")
+                            .font(.system(size: 40))
+                            .frame(maxWidth: .infinity)
+                            .aspectRatio(1, contentMode: .fill)
+                            .background(Color.gray.opacity(0.2))
+                            .overlay {
+                                if item.coverArtURL == "" {
+                                    ProgressView()
+                                        .progressViewStyle(.circular)
+                                }
+                            }
+                    } else if item.coverArtURL == "" {
+                        ProgressView()
+                            .progressViewStyle(.circular)
+                            .frame(maxWidth: .infinity)
+                            .aspectRatio(1, contentMode: .fill)
+                            .background(Color.gray.opacity(0.2))
+                    } else {
                         AsyncImage(url: URL(string: item.coverArtURL ?? "")) { image in
                             image.resizable()
                         } placeholder: {
                             Color.gray
                         }
                         .aspectRatio(1, contentMode: .fill)
-                    } else {
-                        Image(systemName: "music.note")
-                            .font(.system(size: 40))
-                            .frame(maxWidth: .infinity)
-                            .aspectRatio(1, contentMode: .fill)
-                            .background(Color.gray.opacity(0.2))
                     }
                     
                     // Text overlay with gradient background

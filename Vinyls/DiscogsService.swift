@@ -3,13 +3,15 @@ import OSLog
 
 @MainActor
 class DiscogsService: ObservableObject {
+    static let shared = DiscogsService()
+    
     private let client: DiscogsClient
     private let logger = Logger(subsystem: "com.vinyls.app", category: "Discogs")
     
     @Published private(set) var isLoading = false
     @Published private(set) var error: Error?
     
-    init() {
+    private init() {
         print("🎵 DiscogsService init called")
         logger.debug("Initializing DiscogsService")
         do {
