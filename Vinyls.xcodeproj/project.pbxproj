@@ -6,6 +6,10 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		E65B01BC2D97795300BF0024 /* .env in Resources */ = {isa = PBXBuildFile; fileRef = E65B01BB2D97795300BF0024 /* .env */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
 		E64F092A2D8CA7E300B5DABE /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
@@ -27,6 +31,7 @@
 		E64F09142D8CA7E200B5DABE /* Vinyls.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Vinyls.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		E64F09292D8CA7E300B5DABE /* VinylsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VinylsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E64F09332D8CA7E300B5DABE /* VinylsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VinylsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		E65B01BB2D97795300BF0024 /* .env */ = {isa = PBXFileReference; lastKnownFileType = text; path = .env; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -75,6 +80,7 @@
 		E64F090B2D8CA7E200B5DABE = {
 			isa = PBXGroup;
 			children = (
+				E65B01BB2D97795300BF0024 /* .env */,
 				E64F09162D8CA7E200B5DABE /* Vinyls */,
 				E64F092C2D8CA7E300B5DABE /* VinylsTests */,
 				E64F09362D8CA7E300B5DABE /* VinylsUITests */,
@@ -212,6 +218,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E65B01BC2D97795300BF0024 /* .env in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -397,9 +404,12 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Vinyls/Preview Content\"";
 				DEVELOPMENT_TEAM = 55VL5TPD7X;
+				DISCOGS_API_TOKEN = "$(DISCOGS_API_TOKEN)";
+				"DISCOGS_API_TOKEN[arch=*]" = "$(DISCOGS_API_TOKEN)";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Vinyls;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access is needed to scan barcodes";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -427,9 +437,12 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Vinyls/Preview Content\"";
 				DEVELOPMENT_TEAM = 55VL5TPD7X;
+				DISCOGS_API_TOKEN = "$(DISCOGS_API_TOKEN)";
+				"DISCOGS_API_TOKEN[arch=*]" = "$(DISCOGS_API_TOKEN)";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = Vinyls;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access is needed to scan barcodes";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;

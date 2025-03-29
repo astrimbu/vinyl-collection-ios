@@ -2,6 +2,9 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+    <key>NSCameraUsageDescription</key>
+    <string>Camera access is needed to scan barcodes.</string>
+    
     <key>DISCOGS_API_TOKEN</key>
     <string>$(DISCOGS_API_TOKEN)</string>
     

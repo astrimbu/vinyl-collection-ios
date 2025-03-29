@@ -93,7 +93,7 @@ struct AddAlbumView: View {
         logger.debug("Starting Discogs search for '\(artist) - \(title)'")
         isSearching = true
         
-        let (artworkUrl, fetchedTracks) = await discogsService.fetchAlbumDetails(
+        let (artworkUrl, fetchedTracks, _, _, _) = await discogsService.fetchAlbumDetails(
             artist: artist,
             title: title
         )

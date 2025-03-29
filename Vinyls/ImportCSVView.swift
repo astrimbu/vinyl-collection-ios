@@ -209,7 +209,7 @@ struct ImportCSVView: View {
         
         for item in items {
             // Fetch Discogs data
-            let (artworkUrl, tracks) = await discogsService.fetchAlbumDetails(
+            let (artworkUrl, tracks, genre, year, notes) = await discogsService.fetchAlbumDetails(
                 artist: item.artist ?? "",
                 title: item.albumTitle ?? ""
             )
@@ -227,6 +227,17 @@ struct ImportCSVView: View {
                     } catch {
                         print("Failed to encode tracks data: \(error)")
                     }
+                }
+                
+                // Update additional fields if they're empty
+                if item.genre == nil {
+                    item.genre = genre
+                }
+                if item.releaseYear == 0, let yearStr = year, let yearInt = Int16(yearStr) {
+                    item.releaseYear = yearInt
+                }
+                if item.notes == nil {
+                    item.notes = notes
                 }
                 
                 try? viewContext.save()
