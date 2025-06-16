@@ -11,9 +11,11 @@ import CoreData
 
 struct ContentView: View {
     @Environment(\.managedObjectContext) private var viewContext
+    @StateObject private var googleSheetsService = GoogleSheetsService()
     @State private var showingAddRecordSheet = false
     @State private var showingImportCSVSheet = false
     @State private var showingDeleteAllConfirmation = false
+    @State private var showingExportSuccess = false
     @State private var searchText = ""
     @State private var sortOption = SortOption.artistAsc
     @State private var viewMode = ViewMode.grid
@@ -163,6 +165,9 @@ struct ContentView: View {
                         Button(action: { showingImportCSVSheet = true }) {
                             Label("Import CSV", systemImage: "square.and.arrow.down")
                         }
+                        Button(action: exportToGoogleSheets) {
+                            Label("Export to Google Sheets", systemImage: "arrow.up.doc")
+                        }
                         Button(role: .destructive, action: { showingDeleteAllConfirmation = true }) {
                             Label("Delete All Records", systemImage: "trash")
                         }
@@ -190,6 +195,11 @@ struct ContentView: View {
             }
         } message: {
             Text("This action cannot be undone. Are you sure you want to delete all records in your collection?")
+        }
+        .alert("Export Successful", isPresented: $showingExportSuccess) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Your vinyl collection has been exported to Google Sheets.")
         }
         .onAppear {
             updateFetchRequest()
@@ -220,6 +230,20 @@ struct ContentView: View {
                 fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
             }
         }
+    }
+    
+    private func exportToGoogleSheets() {
+        let albums = items.map { item in
+            Album(
+                title: item.albumTitle ?? "",
+                artist: item.artist ?? "",
+                year: Int(item.releaseYear),
+                genre: item.genre ?? "",
+                notes: item.notes ?? ""
+            )
+        }
+        
+        googleSheetsService.exportToGoogleSheets(albums: albums)
     }
 }
 
@@ -918,6 +942,15 @@ struct RecordGridItemView: View {
         }
         .buttonStyle(PlainButtonStyle())
     }
+}
+
+// Add this struct to match the GoogleSheetsService expectations
+struct Album {
+    let title: String
+    let artist: String
+    let year: Int
+    let genre: String
+    let notes: String
 }
 
 private let itemFormatter: DateFormatter = {
