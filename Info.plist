@@ -17,9 +17,6 @@
     <key>NSCameraUsageDescription</key>
     <string>Camera access is needed to scan barcodes.</string>
     
-    <key>DISCOGS_API_TOKEN</key>
-    <string>$(DISCOGS_API_TOKEN)</string>
-    
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsArbitraryLoads</key>
@@ -39,5 +36,13 @@
             </dict>
         </dict>
     </dict>
+
+    <key>GOOGLE_CLIENT_ID</key>
+    <string>$(GOOGLE_CLIENT_ID)</string>
+    <key>GOOGLE_REDIRECT_URI</key>
+    <string>$(GOOGLE_REDIRECT_URI)</string>
+
+    <key>DISCOGS_API_TOKEN</key>
+    <string>$(DISCOGS_API_TOKEN)</string>
 </dict>
 </plist> 

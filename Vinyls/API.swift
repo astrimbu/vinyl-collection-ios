@@ -28,14 +28,44 @@ enum API {
     }
 
     static var googleClientId: String {
-        ProcessInfo.processInfo.environment["GOOGLE_CLIENT_ID"] ?? ""
+        #if DEBUG
+        if let id = ProcessInfo.processInfo.environment["GOOGLE_CLIENT_ID"] {
+            return id
+        }
+        #endif
+        do {
+            let id: String = try Configuration.value(for: "GOOGLE_CLIENT_ID")
+            return id
+        } catch {
+            fatalError("GOOGLE_CLIENT_ID not found in environment or Info.plist")
+        }
     }
     
     static var googleClientSecret: String {
-        ProcessInfo.processInfo.environment["GOOGLE_CLIENT_SECRET"] ?? ""
+        #if DEBUG
+        if let secret = ProcessInfo.processInfo.environment["GOOGLE_CLIENT_SECRET"] {
+            return secret
+        }
+        #endif
+        do {
+            let secret: String = try Configuration.value(for: "GOOGLE_CLIENT_SECRET")
+            return secret
+        } catch {
+            fatalError("GOOGLE_CLIENT_SECRET not found in environment or Info.plist")
+        }
     }
     
     static var googleRedirectUri: String {
-        ProcessInfo.processInfo.environment["GOOGLE_REDIRECT_URI"] ?? ""
+        #if DEBUG
+        if let uri = ProcessInfo.processInfo.environment["GOOGLE_REDIRECT_URI"] {
+            return uri
+        }
+        #endif
+        do {
+            let uri: String = try Configuration.value(for: "GOOGLE_REDIRECT_URI")
+            return uri
+        } catch {
+            fatalError("GOOGLE_REDIRECT_URI not found in environment or Info.plist")
+        }
     }
 } 

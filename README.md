@@ -37,20 +37,26 @@ A beautiful iOS app to manage your vinyl record collection with advanced feature
 - A Discogs API token
 - (Optional) Google Cloud credentials for Sheets export
 
-### Environment Setup
-
-1. Copy the `.env.example` file to `.env`:
+### Secrets Configuration (.xcconfig)
+1. Copy `Secrets.xcconfig.example` to `Secrets.xcconfig` at the project root:
    ```bash
-   cp .env.example .env
+   cp Secrets.xcconfig.example Secrets.xcconfig
    ```
+   `Secrets.xcconfig` is listed in `.gitignore`, so it will never be committed.
 
-2. Add your API credentials to the `.env` file:
+2. Open `Secrets.xcconfig` and paste in your credentials:
+
    ```
    DISCOGS_API_TOKEN=your_discogs_token_here
+
+   # Google Sheets OAuth
    GOOGLE_CLIENT_ID=your_google_client_id_here
-   GOOGLE_CLIENT_SECRET=your_google_client_secret_here
-   GOOGLE_REDIRECT_URI=aeiou.Vinyls://oauth
+   GOOGLE_REDIRECT_URI=aeiou.Vinyls:/oauth2callback
    ```
+
+3. In Xcode select **Vinyls → Target → Build Settings** and ensure these keys appear in the *User-Defined* section. Xcode substitutes them inside `Info.plist` at build-time.
+
+4. Build & run as usual (`⌘R`). If you change a secret later, simply edit `Secrets.xcconfig`.
 
 ### Getting API Credentials
 
@@ -64,7 +70,7 @@ A beautiful iOS app to manage your vinyl record collection with advanced feature
 2. Create a new project or select existing one
 3. Enable the Google Sheets API
 4. Create OAuth 2.0 credentials
-5. Add `aeiou.Vinyls://oauth` as a redirect URI
+5. Add `aeiou.Vinyls:/oauth2callback` as a redirect URI
 
 ### Building the Project
 
@@ -128,7 +134,7 @@ The app follows modern iOS development practices:
 - **Rate Limiting**: Automatic compliance with Discogs API limits
 - **Background Processing**: Metadata fetching doesn't block the UI
 - **Error Handling**: Graceful handling of network and API errors
-- **Security**: Secure credential management with environment variables
+- **Security**: Secure credential management with xcconfig build settings
 - **Performance**: Efficient image loading and caching
 - **Accessibility**: Full VoiceOver support for vision accessibility
 

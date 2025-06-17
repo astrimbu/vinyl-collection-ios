@@ -8,6 +8,9 @@
 
 /* Begin PBXBuildFile section */
 		E65B01BC2D97795300BF0024 /* .env in Resources */ = {isa = PBXBuildFile; fileRef = E65B01BB2D97795300BF0024 /* .env */; };
+		E6F88D312E00AF5900D94F9A /* Secrets.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = E6F88D302E00AF5800D94F9A /* Secrets.xcconfig */; };
+		E6F88D322E00AF5900D94F9A /* Secrets.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = E6F88D302E00AF5800D94F9A /* Secrets.xcconfig */; };
+		E6F88D332E00AF5900D94F9A /* Secrets.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = E6F88D302E00AF5800D94F9A /* Secrets.xcconfig */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -32,11 +35,25 @@
 		E64F09292D8CA7E300B5DABE /* VinylsTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VinylsTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E64F09332D8CA7E300B5DABE /* VinylsUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VinylsUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		E65B01BB2D97795300BF0024 /* .env */ = {isa = PBXFileReference; lastKnownFileType = text; path = .env; sourceTree = "<group>"; };
+		E6F88D302E00AF5800D94F9A /* Secrets.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Secrets.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		E6F88D352E00D88F00D94F9A /* Exceptions for "Vinyls" folder in "Vinyls" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = E64F09132D8CA7E200B5DABE /* Vinyls */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		E64F09162D8CA7E200B5DABE /* Vinyls */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				E6F88D352E00D88F00D94F9A /* Exceptions for "Vinyls" folder in "Vinyls" target */,
+			);
 			path = Vinyls;
 			sourceTree = "<group>";
 		};
@@ -81,6 +98,7 @@
 			isa = PBXGroup;
 			children = (
 				E65B01BB2D97795300BF0024 /* .env */,
+				E6F88D302E00AF5800D94F9A /* Secrets.xcconfig */,
 				E64F09162D8CA7E200B5DABE /* Vinyls */,
 				E64F092C2D8CA7E300B5DABE /* VinylsTests */,
 				E64F09362D8CA7E300B5DABE /* VinylsUITests */,
@@ -218,6 +236,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E6F88D312E00AF5900D94F9A /* Secrets.xcconfig in Resources */,
 				E65B01BC2D97795300BF0024 /* .env in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -226,6 +245,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E6F88D322E00AF5900D94F9A /* Secrets.xcconfig in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -233,6 +253,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E6F88D332E00AF5900D94F9A /* Secrets.xcconfig in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -278,6 +299,7 @@
 /* Begin XCBuildConfiguration section */
 		E64F093B2D8CA7E300B5DABE /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = E6F88D302E00AF5800D94F9A /* Secrets.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -341,6 +363,7 @@
 		};
 		E64F093C2D8CA7E300B5DABE /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReference = E6F88D302E00AF5800D94F9A /* Secrets.xcconfig */;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
@@ -404,10 +427,9 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Vinyls/Preview Content\"";
 				DEVELOPMENT_TEAM = 55VL5TPD7X;
-				DISCOGS_API_TOKEN = "$(DISCOGS_API_TOKEN)";
-				"DISCOGS_API_TOKEN[arch=*]" = "$(DISCOGS_API_TOKEN)";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Vinyls/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Vinyls;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access is needed to scan barcodes";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -437,10 +459,9 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "\"Vinyls/Preview Content\"";
 				DEVELOPMENT_TEAM = 55VL5TPD7X;
-				DISCOGS_API_TOKEN = "$(DISCOGS_API_TOKEN)";
-				"DISCOGS_API_TOKEN[arch=*]" = "$(DISCOGS_API_TOKEN)";
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Vinyls/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = Vinyls;
 				INFOPLIST_KEY_NSCameraUsageDescription = "Camera access is needed to scan barcodes";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

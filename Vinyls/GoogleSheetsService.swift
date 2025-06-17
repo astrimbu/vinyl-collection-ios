@@ -10,7 +10,7 @@ class GoogleSheetsService: NSObject, ObservableObject {
     private var webAuthSession: ASWebAuthenticationSession?
     
     func authorize() {
-        let scope = "https://www.googleapis.com/auth/spreadsheets"
+        let scope = "https://www.googleapis.com/auth/drive.file"
         let authURL = "https://accounts.google.com/o/oauth2/v2/auth"
         
         var urlComponents = URLComponents(string: authURL)!
@@ -18,7 +18,9 @@ class GoogleSheetsService: NSObject, ObservableObject {
             URLQueryItem(name: "client_id", value: clientId),
             URLQueryItem(name: "redirect_uri", value: redirectUri),
             URLQueryItem(name: "response_type", value: "code"),
-            URLQueryItem(name: "scope", value: scope)
+            URLQueryItem(name: "scope", value: scope),
+            URLQueryItem(name: "access_type", value: "offline"),
+            URLQueryItem(name: "prompt", value: "consent")
         ]
         
         webAuthSession = ASWebAuthenticationSession(
@@ -42,7 +44,7 @@ class GoogleSheetsService: NSObject, ObservableObject {
             }
         
         webAuthSession?.presentationContextProvider = self
-        webAuthSession?.prefersEphemeralWebBrowserSession = true
+        webAuthSession?.prefersEphemeralWebBrowserSession = false 
         webAuthSession?.start()
     }
     
@@ -52,13 +54,15 @@ class GoogleSheetsService: NSObject, ObservableObject {
         request.httpMethod = "POST"
         request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
         
-        let parameters = [
+        var parameters: [String: String] = [
             "client_id": clientId,
-            "client_secret": clientSecret,
             "code": code,
             "redirect_uri": redirectUri,
             "grant_type": "authorization_code"
         ]
+        if !clientSecret.isEmpty {
+            parameters["client_secret"] = clientSecret
+        }
         
         request.httpBody = parameters
             .map { "\($0.key)=\($0.value)" }
@@ -77,27 +81,35 @@ class GoogleSheetsService: NSObject, ObservableObject {
                     self?.isAuthenticated = true
                     // Store token response for later use
                     UserDefaults.standard.set(tokenResponse.accessToken, forKey: "googleAccessToken")
-                    UserDefaults.standard.set(tokenResponse.refreshToken, forKey: "googleRefreshToken")
+                    if let refresh = tokenResponse.refreshToken {
+                        UserDefaults.standard.set(refresh, forKey: "googleRefreshToken")
+                    }
                 }
             } catch {
-                print("Token decode error:", error)
+                if let raw = String(data: data, encoding: .utf8) {
+                    print("Token decode error: \(error). Raw response: \(raw)")
+                } else {
+                    print("Token decode error: \(error). Could not decode raw response to string.")
+                }
             }
         }.resume()
     }
     
     func exportToGoogleSheets(albums: [Album]) {
-        guard let accessToken = UserDefaults.standard.string(forKey: "googleAccessToken") else {
-            authorize()
-            return
-        }
-        
-        // Create a new spreadsheet
-        createSpreadsheet(accessToken: accessToken) { result in
-            switch result {
-            case .success(let spreadsheetId):
-                self.updateSpreadsheetData(spreadsheetId: spreadsheetId, albums: albums, accessToken: accessToken)
-            case .failure(let error):
-                print("Error creating spreadsheet:", error)
+        // Always try to obtain a *fresh* access token first. If that fails, we fall back to the auth flow.
+        obtainValidAccessToken { [weak self] token in
+            guard let self = self, let accessToken = token else {
+                self?.authorize()
+                return
+            }
+
+            self.createSpreadsheet(accessToken: accessToken) { result in
+                switch result {
+                case .success(let spreadsheetId):
+                    self.updateSpreadsheetData(spreadsheetId: spreadsheetId, albums: albums, accessToken: accessToken)
+                case .failure(let error):
+                    print("Error creating spreadsheet:", error)
+                }
             }
         }
     }
@@ -127,6 +139,14 @@ class GoogleSheetsService: NSObject, ObservableObject {
                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let spreadsheetId = json["spreadsheetId"] as? String else {
                 completion(.failure(NSError(domain: "", code: -1)))
+                return
+            }
+            
+            if let httpResponse = response as? HTTPURLResponse,
+               !(200..<300).contains(httpResponse.statusCode) {
+                let body = String(data: data ?? Data(), encoding: .utf8) ?? ""
+                print("❌ Sheets API error \(httpResponse.statusCode): \(body)")
+                completion(.failure(NSError(domain: "", code: httpResponse.statusCode)))
                 return
             }
             
@@ -165,6 +185,64 @@ class GoogleSheetsService: NSObject, ObservableObject {
             print("Successfully exported to Google Sheets!")
         }.resume()
     }
+    
+    // MARK: - Token refresh helpers
+    
+    private func obtainValidAccessToken(completion: @escaping (String?) -> Void) {
+        if let refreshToken = UserDefaults.standard.string(forKey: "googleRefreshToken") {
+            refreshAccessToken(refreshToken: refreshToken) { token in
+                completion(token)
+            }
+        } else if let accessToken = UserDefaults.standard.string(forKey: "googleAccessToken") {
+            completion(accessToken)
+        } else {
+            completion(nil)
+        }
+    }
+    
+    private func refreshAccessToken(refreshToken: String, completion: @escaping (String?) -> Void) {
+        var request = URLRequest(url: URL(string: "https://oauth2.googleapis.com/token")!)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        
+        var parameters = [
+            "client_id": clientId,
+            "refresh_token": refreshToken,
+            "grant_type": "refresh_token"
+        ]
+        if !clientSecret.isEmpty {
+            parameters["client_secret"] = clientSecret
+        }
+        
+        request.httpBody = parameters
+            .map { "\($0.key)=\($0.value)" }
+            .joined(separator: "&")
+            .data(using: .utf8)
+        
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            guard let data = data else {
+                print("Refresh token error:", error?.localizedDescription ?? "Unknown")
+                completion(nil)
+                return
+            }
+            
+            do {
+                let tokenResponse = try JSONDecoder().decode(TokenResponse.self, from: data)
+                UserDefaults.standard.set(tokenResponse.accessToken, forKey: "googleAccessToken")
+                if let refresh = tokenResponse.refreshToken {
+                    UserDefaults.standard.set(refresh, forKey: "googleRefreshToken")
+                }
+                completion(tokenResponse.accessToken)
+            } catch {
+                if let raw = String(data: data, encoding: .utf8) {
+                    print("Refresh token decode error: \(error). Raw response: \(raw)")
+                } else {
+                    print("Refresh token decode error: \(error). Could not decode raw response to string.")
+                }
+                completion(nil)
+            }
+        }.resume()
+    }
 }
 
 extension GoogleSheetsService: ASWebAuthenticationPresentationContextProviding {
@@ -175,7 +253,7 @@ extension GoogleSheetsService: ASWebAuthenticationPresentationContextProviding {
 
 struct TokenResponse: Codable {
     let accessToken: String
-    let refreshToken: String
+    let refreshToken: String?
     let expiresIn: Int
     let tokenType: String
     
