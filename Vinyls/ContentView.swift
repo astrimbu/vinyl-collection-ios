@@ -539,6 +539,8 @@ struct AddRecordView: View {
     @State private var manualYear = ""
     @State private var manualNotes = ""
     @State private var manualIdentifier = ""
+    @State private var showDuplicateSummary = false
+    @State private var duplicateSummaryMessage = ""
     
     var hasValidRecordsToSave: Bool {
         if isManualEntry {
@@ -581,7 +583,6 @@ struct AddRecordView: View {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("Save") {
                         addRecords()
-                        isPresented = false
                     }
                     .disabled(!hasValidRecordsToSave)
                 }
@@ -613,6 +614,13 @@ struct AddRecordView: View {
                     discogsService.cancelSearch(for: barcode)
                     barcodeResults.removeValue(forKey: barcode)
                 }
+            }
+            .alert("Import Result", isPresented: $showDuplicateSummary) {
+                Button("OK") {
+                    isPresented = false
+                }
+            } message: {
+                Text(duplicateSummaryMessage)
             }
         }
     }
@@ -688,13 +696,42 @@ struct AddRecordView: View {
                 }
             } else {
                 // Add scanned records
+                var addedCount = 0
+                var skippedBarcodes: [String] = []
+                var existingIdentifiers = Set<String>()
+                var existingDisplayByIdentifier: [String: String] = [:]
+
+                if !scannedBarcodes.isEmpty {
+                    let request: NSFetchRequest<Item> = Item.fetchRequest()
+                    request.predicate = NSPredicate(format: "identifier IN %@", scannedBarcodes)
+                    do {
+                        let existingItems = try viewContext.fetch(request)
+                        existingIdentifiers = Set(existingItems.compactMap { $0.identifier })
+                        existingDisplayByIdentifier = Dictionary(uniqueKeysWithValues: existingItems.compactMap { item in
+                            guard let id = item.identifier else { return nil }
+                            let artist = (item.artist?.isEmpty == false) ? item.artist! : "Unknown Artist"
+                            let title = (item.albumTitle?.isEmpty == false) ? item.albumTitle! : "Unknown Album"
+                            return (id, "\(artist) - \(title)")
+                        })
+                    } catch {
+                        print("Failed to fetch existing identifiers: \(error)")
+                        existingIdentifiers = []
+                    }
+                }
+
                 for barcode in scannedBarcodes {
+                    if existingIdentifiers.contains(barcode) {
+                        let display = existingDisplayByIdentifier[barcode] ?? barcode
+                        skippedBarcodes.append(display)
+                        continue
+                    }
+
                     guard let result = barcodeResults[barcode],
                           let artist = result.artist,
                           let title = result.title else {
                         continue
                     }
-                    
+
                     let newItem = Item(context: viewContext)
                     newItem.timestamp = Date()
                     newItem.artist = artist
@@ -702,17 +739,17 @@ struct AddRecordView: View {
                     newItem.genre = result.genre
                     newItem.notes = result.notes
                     newItem.identifier = barcode
-                    
+
                     if let yearStr = result.year, let year = Int16(yearStr) {
                         newItem.releaseYear = year
                     } else {
                         newItem.releaseYear = 0
                     }
-                    
+
                     if let coverUrl = result.coverUrl {
                         newItem.coverArtURL = coverUrl.absoluteString
                     }
-                    
+
                     // Save tracklist if available
                     if let tracklist = result.tracklist {
                         do {
@@ -722,7 +759,23 @@ struct AddRecordView: View {
                             print("Failed to encode tracklist: \(error)")
                         }
                     }
+
+                    addedCount += 1
                 }
+
+                let skippedCount = skippedBarcodes.count
+                let truncateTo = 32
+                let list = skippedBarcodes.map { entry -> String in
+                    let singleLine = entry.replacingOccurrences(of: "\n", with: " ")
+                    if singleLine.count > truncateTo {
+                        let idx = singleLine.index(singleLine.startIndex, offsetBy: truncateTo)
+                        return String(singleLine[..<idx]) + "…"
+                    } else {
+                        return singleLine
+                    }
+                }.joined(separator: "\n")
+                duplicateSummaryMessage = "Added \(addedCount), skipped \(skippedCount) duplicate\(skippedCount == 1 ? "" : "s")" + (skippedCount > 0 ? "\n\n\(list)" : "")
+                showDuplicateSummary = true
             }
 
             do {
@@ -730,6 +783,10 @@ struct AddRecordView: View {
             } catch {
                 let nsError = error as NSError
                 print("Unresolved error \(nsError), \(nsError.userInfo)")
+            }
+
+            if isManualEntry {
+                isPresented = false
             }
         }
     }
