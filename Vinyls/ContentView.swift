@@ -152,9 +152,6 @@ struct ContentView: View {
                 }
             }
             .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    EditButton()
-                }
                 ToolbarItem {
                     Button(action: { showingAddRecordSheet = true }) {
                         Label("Add Record", systemImage: "plus")
@@ -253,6 +250,8 @@ struct RecordDetailView: View {
     @State private var tracks: [DiscogsTrack] = []
     @State private var currentArtworkURL: String = ""
     @State private var isEditing = false
+    @Environment(\.dismiss) private var dismiss
+    @State private var showingDeleteConfirmation = false
     
     // Editable states
     @State private var editedArtist: String = ""
@@ -275,6 +274,21 @@ struct RecordDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .center, spacing: 20) {
+                if isEditing {
+                    Button {
+                        showingDeleteConfirmation = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "trash")
+                            Text("Delete Album")
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+                    .padding(.horizontal)
+                }
+                
                 if currentArtworkURL != "" {
                     AsyncImage(url: URL(string: currentArtworkURL)) { image in
                         image.resizable()
@@ -324,7 +338,7 @@ struct RecordDetailView: View {
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
                                 .keyboardType(.numberPad)
                         } else {
-                            Text(item.releaseYear > 0 ? "\(item.releaseYear)" : "Unknown")
+                            Text(item.releaseYear > 0 ? String(item.releaseYear) : "Unknown")
                         }
                     }
                     
@@ -416,6 +430,14 @@ struct RecordDetailView: View {
                 }
             }
         }
+        .alert("Delete Album?", isPresented: $showingDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                deleteItem()
+            }
+        } message: {
+            Text("This action cannot be undone. Are you sure you want to delete this album?")
+        }
         .task {
             print("👁️ RecordDetailView appeared, checking if Discogs data needed")
             await refreshDiscogsData(forceRefresh: false)
@@ -438,6 +460,20 @@ struct RecordDetailView: View {
                 
                 try? context.save()
             }
+        }
+    }
+    
+    private func deleteItem() {
+        if let context = item.managedObjectContext {
+            context.perform {
+                context.delete(item)
+                try? context.save()
+                DispatchQueue.main.async {
+                    dismiss()
+                }
+            }
+        } else {
+            dismiss()
         }
     }
     
@@ -697,6 +733,7 @@ struct AddRecordView: View {
             } else {
                 // Add scanned records
                 var addedCount = 0
+                var addedDisplays: [String] = []
                 var skippedBarcodes: [String] = []
                 var existingIdentifiers = Set<String>()
                 var existingDisplayByIdentifier: [String: String] = [:]
@@ -761,11 +798,13 @@ struct AddRecordView: View {
                     }
 
                     addedCount += 1
+                    let display = "\(artist) - \(title)"
+                    addedDisplays.append(display)
                 }
 
                 let skippedCount = skippedBarcodes.count
                 let truncateTo = 32
-                let list = skippedBarcodes.map { entry -> String in
+                let addedList = addedDisplays.map { entry -> String in
                     let singleLine = entry.replacingOccurrences(of: "\n", with: " ")
                     if singleLine.count > truncateTo {
                         let idx = singleLine.index(singleLine.startIndex, offsetBy: truncateTo)
@@ -774,7 +813,22 @@ struct AddRecordView: View {
                         return singleLine
                     }
                 }.joined(separator: "\n")
-                duplicateSummaryMessage = "Added \(addedCount), skipped \(skippedCount) duplicate\(skippedCount == 1 ? "" : "s")" + (skippedCount > 0 ? "\n\n\(list)" : "")
+                let skippedList = skippedBarcodes.map { entry -> String in
+                    let singleLine = entry.replacingOccurrences(of: "\n", with: " ")
+                    if singleLine.count > truncateTo {
+                        let idx = singleLine.index(singleLine.startIndex, offsetBy: truncateTo)
+                        return String(singleLine[..<idx]) + "…"
+                    } else {
+                        return singleLine
+                    }
+                }.joined(separator: "\n")
+
+                var message = "Added \(addedCount)"
+                if addedCount > 0 { message += "\n\n\(addedList)" }
+                if skippedCount > 0 {
+                    message += "\n\nSkipped \(skippedCount)\n\n\(skippedList)"
+                }
+                duplicateSummaryMessage = message
                 showDuplicateSummary = true
             }
 
@@ -935,6 +989,8 @@ struct RecordRowView: View {
 // Update grid item view component with overlay
 struct RecordGridItemView: View {
     @ObservedObject var item: Item
+    @Environment(\.managedObjectContext) private var viewContext
+    @State private var showingDeleteConfirmation = false
     
     var body: some View {
         NavigationLink {
@@ -998,6 +1054,24 @@ struct RecordGridItemView: View {
             .shadow(radius: 2)
         }
         .buttonStyle(PlainButtonStyle())
+        .contextMenu {
+            Button(role: .destructive) {
+                showingDeleteConfirmation = true
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+        }
+        .alert("Delete Album?", isPresented: $showingDeleteConfirmation) {
+            Button("Cancel", role: .cancel) { }
+            Button("Delete", role: .destructive) {
+                withAnimation {
+                    viewContext.delete(item)
+                    try? viewContext.save()
+                }
+            }
+        } message: {
+            Text("This action cannot be undone. Are you sure you want to delete this album?")
+        }
     }
 }
 
