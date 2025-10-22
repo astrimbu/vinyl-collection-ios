@@ -30,8 +30,10 @@ struct ContentView: View {
         case artistDesc = "Artist (Z-A)"
         case albumAsc = "Album (A-Z)"
         case albumDesc = "Album (Z-A)"
-        case yearAsc = "Year (Oldest First)"
-        case yearDesc = "Year (Newest First)"
+        case yearAsc = "Year (Oldest)"
+        case yearDesc = "Year (Newest)"
+        case dateAddedDesc = "Date Added (Newest)"
+        case dateAddedAsc = "Date Added (Oldest)"
         
         var id: String { self.rawValue }
     }
@@ -50,6 +52,10 @@ struct ContentView: View {
             return [SortDescriptor(\Item.releaseYear, order: .forward)]
         case .yearDesc:
             return [SortDescriptor(\Item.releaseYear, order: .reverse)]
+        case .dateAddedDesc:
+            return [SortDescriptor(\Item.timestamp, order: .reverse)]
+        case .dateAddedAsc:
+            return [SortDescriptor(\Item.timestamp, order: .forward)]
         }
     }
     

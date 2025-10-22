@@ -39,6 +39,7 @@ struct PersistenceController {
         if inMemory {
             container.persistentStoreDescriptions.first!.url = URL(fileURLWithPath: "/dev/null")
         }
+        let viewContext = container.viewContext
         container.loadPersistentStores(completionHandler: { (storeDescription, error) in
             if let error = error as NSError? {
                 // Replace this implementation with code to handle the error appropriately.
@@ -53,6 +54,37 @@ struct PersistenceController {
                  Check the error message to determine what the actual problem was.
                  */
                 fatalError("Unresolved error \(error), \(error.userInfo)")
+            } else {
+                // Backfill any missing timestamps so Date Added sorting works for existing data
+                let defaultDate: Date = {
+                    if let url = storeDescription.url {
+                        if let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
+                           let created = attrs[.creationDate] as? Date {
+                            return created
+                        }
+                    }
+                    return Date()
+                }()
+
+                viewContext.perform {
+                    let request: NSFetchRequest<Item> = Item.fetchRequest()
+                    request.predicate = NSPredicate(format: "timestamp == nil")
+                    request.fetchBatchSize = 100
+                    do {
+                        let items = try viewContext.fetch(request)
+                        if !items.isEmpty {
+                            for item in items {
+                                item.timestamp = defaultDate
+                            }
+                            try viewContext.save()
+                        }
+                    } catch {
+                        // Non-fatal: if backfill fails, sorting by date may place some items unpredictably
+                        #if DEBUG
+                        print("Timestamp backfill failed: \(error)")
+                        #endif
+                    }
+                }
             }
         })
         container.viewContext.automaticallyMergesChangesFromParent = true
