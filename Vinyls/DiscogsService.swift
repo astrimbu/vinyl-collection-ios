@@ -157,4 +157,40 @@ class DiscogsService: ObservableObject {
         backgroundTasks[barcode]?.cancel()
         backgroundTasks[barcode] = nil
     }
+
+    func lookupByIdentifier(_ identifier: String) async -> (coverUrl: URL?, artist: String?, title: String?, genre: String?, year: String?, tracklist: [DiscogsTrack]?, notes: String?) {
+        isLoading = true
+        error = nil
+        logger.debug("Looking up by identifier: \(identifier)")
+        do {
+            let base = try await client.searchByIdentifier(identifier)
+            var tracklist: [DiscogsTrack]? = nil
+            var notes: String? = nil
+            var genre = base.genre
+            var year = base.year
+            if let releaseId = base.releaseId {
+                let details = try await client.getTrackList(releaseId: releaseId)
+                tracklist = details.tracks
+                notes = details.notes
+                genre = genre ?? details.genre
+                year = year ?? details.year
+            }
+            isLoading = false
+            return (base.coverUrl, base.artist, base.title, genre, year, tracklist, notes)
+        } catch DiscogsError.noResults {
+            logger.debug("No results found for identifier: \(identifier)")
+            isLoading = false
+            return (nil, nil, nil, nil, nil, nil, nil)
+        } catch DiscogsError.rateLimitExceeded {
+            logger.error("Rate limit exceeded while searching identifier: \(identifier)")
+            self.error = DiscogsError.rateLimitExceeded
+            isLoading = false
+            return (nil, nil, nil, nil, nil, nil, nil)
+        } catch {
+            logger.error("Error searching identifier: \(error.localizedDescription)")
+            self.error = error
+            isLoading = false
+            return (nil, nil, nil, nil, nil, nil, nil)
+        }
+    }
 } 

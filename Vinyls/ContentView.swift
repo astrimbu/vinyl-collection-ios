@@ -557,6 +557,7 @@ struct AddRecordView: View {
     
     @State private var showingBarcodeScanner = false
     @State private var isManualEntry = false
+    @State private var useIdentifierLookup = true
     @State private var scannedBarcodes: [String] = []
     @State private var barcodeResults: [String: (
         coverUrl: URL?,
@@ -575,12 +576,19 @@ struct AddRecordView: View {
     @State private var manualYear = ""
     @State private var manualNotes = ""
     @State private var manualIdentifier = ""
+    @State private var identifierPreview: IdentifierLookupData? = nil
+    @State private var showingIdentifierPreview = false
+    @State private var identifierNoResultAlert = false
     @State private var showDuplicateSummary = false
     @State private var duplicateSummaryMessage = ""
     
     var hasValidRecordsToSave: Bool {
         if isManualEntry {
-            return !manualArtist.isEmpty && !manualTitle.isEmpty
+            if useIdentifierLookup {
+                return !manualIdentifier.isEmpty
+            } else {
+                return !manualArtist.isEmpty && !manualTitle.isEmpty
+            }
         } else {
             return !scannedBarcodes.isEmpty && scannedBarcodes.allSatisfy { barcode in
                 if let result = barcodeResults[barcode] {
@@ -617,14 +625,63 @@ struct AddRecordView: View {
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("Save") {
-                        addRecords()
+                    Button(isManualEntry && useIdentifierLookup ? "Search" : "Save") {
+                        Task { await addRecords() }
                     }
-                    .disabled(!hasValidRecordsToSave)
+                    .disabled(!hasValidRecordsToSave || discogsService.isLoading)
                 }
             }
             .sheet(isPresented: $showingBarcodeScanner) {
                 BarcodeScannerView(scannedBarcodes: $scannedBarcodes)
+            }
+            .sheet(isPresented: $showingIdentifierPreview) {
+                if let preview = identifierPreview {
+                    IdentifierLookupPreviewView(
+                        preview: preview,
+                        onConfirm: {
+                            // Create and save the item, then dismiss both sheets
+                            let newItem = Item(context: viewContext)
+                            newItem.timestamp = Date()
+                            newItem.identifier = manualIdentifier
+                            newItem.artist = preview.artist ?? (manualArtist.isEmpty ? nil : manualArtist)
+                            newItem.albumTitle = preview.title ?? (manualTitle.isEmpty ? nil : manualTitle)
+                            newItem.genre = preview.genre ?? (manualGenre.isEmpty ? nil : manualGenre)
+                            newItem.notes = preview.notes ?? (manualNotes.isEmpty ? nil : manualNotes)
+                            if let yearStr = preview.year, let year = Int16(yearStr) {
+                                newItem.releaseYear = year
+                            } else if let year = Int16(manualYear), year > 0 {
+                                newItem.releaseYear = year
+                            } else {
+                                newItem.releaseYear = 0
+                            }
+                            if let coverUrl = preview.coverUrl {
+                                newItem.coverArtURL = coverUrl.absoluteString
+                            }
+                            if let tracklist = preview.tracklist {
+                                do {
+                                    let data = try JSONEncoder().encode(tracklist)
+                                    newItem.tracklist = data
+                                } catch {
+                                    print("Failed to encode tracklist: \(error)")
+                                }
+                            }
+                            do { try viewContext.save() } catch {
+                                let nsError = error as NSError
+                                print("Unresolved error \(nsError), \(nsError.userInfo)")
+                            }
+                            showingIdentifierPreview = false
+                            withAnimation { isPresented = false }
+                        },
+                        onCancel: {
+                            showingIdentifierPreview = false
+                        }
+                    )
+                }
+            }
+            .alert("No match found", isPresented: $identifierNoResultAlert) {
+                Button("OK", role: .cancel) { }
+            } message: {
+                Text("We couldn't find an album for that identifier. You can try another identifier or switch to Manual Input.")
             }
             .onChange(of: scannedBarcodes) { oldValue, newValue in
                 // Find newly added barcodes
@@ -662,19 +719,37 @@ struct AddRecordView: View {
     }
     
     private var manualEntrySection: some View {
-        Section(header: Text("Album Information")) {
-            TextField("Artist", text: $manualArtist)
-            TextField("Album Title", text: $manualTitle)
-            TextField("Genre (optional)", text: $manualGenre)
-            TextField("Year (optional)", text: $manualYear)
-                .keyboardType(.numberPad)
-                .onChange(of: manualYear) { oldValue, newValue in
-                    if !newValue.isEmpty && Int(newValue) == nil {
-                        manualYear = oldValue
+        Section(header: Text("Manual Entry")) {
+            Picker("Method", selection: $useIdentifierLookup) {
+                Text("Search Identifier").tag(true)
+                Text("Manual Input").tag(false)
+            }
+            .pickerStyle(SegmentedPickerStyle())
+
+            if useIdentifierLookup {
+                TextField("Identifier (e.g. B0032752-01)", text: $manualIdentifier)
+                    .submitLabel(.search)
+                    .onSubmit {
+                        if useIdentifierLookup && !manualIdentifier.isEmpty && !discogsService.isLoading {
+                            Task { await addRecords() }
+                        }
                     }
+                if discogsService.isLoading {
+                    ProgressView().progressViewStyle(.circular)
                 }
-            TextField("Notes (optional)", text: $manualNotes)
-            TextField("Identifier (optional)", text: $manualIdentifier)
+            } else {
+                TextField("Artist", text: $manualArtist)
+                TextField("Album Title", text: $manualTitle)
+                TextField("Genre (optional)", text: $manualGenre)
+                TextField("Year (optional)", text: $manualYear)
+                    .keyboardType(.numberPad)
+                    .onChange(of: manualYear) { oldValue, newValue in
+                        if !newValue.isEmpty && Int(newValue) == nil {
+                            manualYear = oldValue
+                        }
+                    }
+                TextField("Notes (optional)", text: $manualNotes)
+            }
         }
     }
     
@@ -713,9 +788,26 @@ struct AddRecordView: View {
         }
     }
     
-    private func addRecords() {
-        withAnimation {
-            if isManualEntry {
+    private func addRecords() async {
+        if isManualEntry {
+            if useIdentifierLookup, !manualIdentifier.isEmpty {
+                // Lookup via Discogs using identifier and present preview instead of saving immediately
+                let result = await discogsService.lookupByIdentifier(manualIdentifier)
+                if result.artist == nil && result.title == nil {
+                    identifierNoResultAlert = true
+                } else {
+                    identifierPreview = IdentifierLookupData(
+                        coverUrl: result.coverUrl,
+                        artist: result.artist,
+                        title: result.title,
+                        genre: result.genre,
+                        year: result.year,
+                        tracklist: result.tracklist,
+                        notes: result.notes
+                    )
+                    showingIdentifierPreview = true
+                }
+            } else {
                 // Add single manual record
                 let newItem = Item(context: viewContext)
                 newItem.timestamp = Date()
@@ -730,117 +822,119 @@ struct AddRecordView: View {
                 } else {
                     newItem.releaseYear = 0
                 }
-            } else {
-                // Add scanned records
-                var addedCount = 0
-                var addedDisplays: [String] = []
-                var skippedBarcodes: [String] = []
-                var existingIdentifiers = Set<String>()
-                var existingDisplayByIdentifier: [String: String] = [:]
+            }
+        } else {
+            // Add scanned records
+            var addedCount = 0
+            var addedDisplays: [String] = []
+            var skippedBarcodes: [String] = []
+            var existingIdentifiers = Set<String>()
+            var existingDisplayByIdentifier: [String: String] = [:]
 
-                if !scannedBarcodes.isEmpty {
-                    let request: NSFetchRequest<Item> = Item.fetchRequest()
-                    request.predicate = NSPredicate(format: "identifier IN %@", scannedBarcodes)
-                    do {
-                        let existingItems = try viewContext.fetch(request)
-                        existingIdentifiers = Set(existingItems.compactMap { $0.identifier })
-                        existingDisplayByIdentifier = Dictionary(uniqueKeysWithValues: existingItems.compactMap { item in
-                            guard let id = item.identifier else { return nil }
-                            let artist = (item.artist?.isEmpty == false) ? item.artist! : "Unknown Artist"
-                            let title = (item.albumTitle?.isEmpty == false) ? item.albumTitle! : "Unknown Album"
-                            return (id, "\(artist) - \(title)")
-                        })
-                    } catch {
-                        print("Failed to fetch existing identifiers: \(error)")
-                        existingIdentifiers = []
-                    }
+            if !scannedBarcodes.isEmpty {
+                let request: NSFetchRequest<Item> = Item.fetchRequest()
+                request.predicate = NSPredicate(format: "identifier IN %@", scannedBarcodes)
+                do {
+                    let existingItems = try viewContext.fetch(request)
+                    existingIdentifiers = Set(existingItems.compactMap { $0.identifier })
+                    existingDisplayByIdentifier = Dictionary(uniqueKeysWithValues: existingItems.compactMap { item in
+                        guard let id = item.identifier else { return nil }
+                        let artist = (item.artist?.isEmpty == false) ? item.artist! : "Unknown Artist"
+                        let title = (item.albumTitle?.isEmpty == false) ? item.albumTitle! : "Unknown Album"
+                        return (id, "\(artist) - \(title)")
+                    })
+                } catch {
+                    print("Failed to fetch existing identifiers: \(error)")
+                    existingIdentifiers = []
                 }
-
-                for barcode in scannedBarcodes {
-                    if existingIdentifiers.contains(barcode) {
-                        let display = existingDisplayByIdentifier[barcode] ?? barcode
-                        skippedBarcodes.append(display)
-                        continue
-                    }
-
-                    guard let result = barcodeResults[barcode],
-                          let artist = result.artist,
-                          let title = result.title else {
-                        continue
-                    }
-
-                    let newItem = Item(context: viewContext)
-                    newItem.timestamp = Date()
-                    newItem.artist = artist
-                    newItem.albumTitle = title
-                    newItem.genre = result.genre
-                    newItem.notes = result.notes
-                    newItem.identifier = barcode
-
-                    if let yearStr = result.year, let year = Int16(yearStr) {
-                        newItem.releaseYear = year
-                    } else {
-                        newItem.releaseYear = 0
-                    }
-
-                    if let coverUrl = result.coverUrl {
-                        newItem.coverArtURL = coverUrl.absoluteString
-                    }
-
-                    // Save tracklist if available
-                    if let tracklist = result.tracklist {
-                        do {
-                            let tracklistData = try JSONEncoder().encode(tracklist)
-                            newItem.tracklist = tracklistData
-                        } catch {
-                            print("Failed to encode tracklist: \(error)")
-                        }
-                    }
-
-                    addedCount += 1
-                    let display = "\(artist) - \(title)"
-                    addedDisplays.append(display)
-                }
-
-                let skippedCount = skippedBarcodes.count
-                let truncateTo = 32
-                let addedList = addedDisplays.map { entry -> String in
-                    let singleLine = entry.replacingOccurrences(of: "\n", with: " ")
-                    if singleLine.count > truncateTo {
-                        let idx = singleLine.index(singleLine.startIndex, offsetBy: truncateTo)
-                        return String(singleLine[..<idx]) + "…"
-                    } else {
-                        return singleLine
-                    }
-                }.joined(separator: "\n")
-                let skippedList = skippedBarcodes.map { entry -> String in
-                    let singleLine = entry.replacingOccurrences(of: "\n", with: " ")
-                    if singleLine.count > truncateTo {
-                        let idx = singleLine.index(singleLine.startIndex, offsetBy: truncateTo)
-                        return String(singleLine[..<idx]) + "…"
-                    } else {
-                        return singleLine
-                    }
-                }.joined(separator: "\n")
-
-                var message = "Added \(addedCount)"
-                if addedCount > 0 { message += "\n\n\(addedList)" }
-                if skippedCount > 0 {
-                    message += "\n\nSkipped \(skippedCount)\n\n\(skippedList)"
-                }
-                duplicateSummaryMessage = message
-                showDuplicateSummary = true
             }
 
+            for barcode in scannedBarcodes {
+                if existingIdentifiers.contains(barcode) {
+                    let display = existingDisplayByIdentifier[barcode] ?? barcode
+                    skippedBarcodes.append(display)
+                    continue
+                }
+
+                guard let result = barcodeResults[barcode],
+                      let artist = result.artist,
+                      let title = result.title else {
+                    continue
+                }
+
+                let newItem = Item(context: viewContext)
+                newItem.timestamp = Date()
+                newItem.artist = artist
+                newItem.albumTitle = title
+                newItem.genre = result.genre
+                newItem.notes = result.notes
+                newItem.identifier = barcode
+
+                if let yearStr = result.year, let year = Int16(yearStr) {
+                    newItem.releaseYear = year
+                } else {
+                    newItem.releaseYear = 0
+                }
+
+                if let coverUrl = result.coverUrl {
+                    newItem.coverArtURL = coverUrl.absoluteString
+                }
+
+                // Save tracklist if available
+                if let tracklist = result.tracklist {
+                    do {
+                        let tracklistData = try JSONEncoder().encode(tracklist)
+                        newItem.tracklist = tracklistData
+                    } catch {
+                        print("Failed to encode tracklist: \(error)")
+                    }
+                }
+
+                addedCount += 1
+                let display = "\(artist) - \(title)"
+                addedDisplays.append(display)
+            }
+
+            let skippedCount = skippedBarcodes.count
+            let truncateTo = 32
+            let addedList = addedDisplays.map { entry -> String in
+                let singleLine = entry.replacingOccurrences(of: "\n", with: " ")
+                if singleLine.count > truncateTo {
+                    let idx = singleLine.index(singleLine.startIndex, offsetBy: truncateTo)
+                    return String(singleLine[..<idx]) + "…"
+                } else {
+                    return singleLine
+                }
+            }.joined(separator: "\n")
+            let skippedList = skippedBarcodes.map { entry -> String in
+                let singleLine = entry.replacingOccurrences(of: "\n", with: " ")
+                if singleLine.count > truncateTo {
+                    let idx = singleLine.index(singleLine.startIndex, offsetBy: truncateTo)
+                    return String(singleLine[..<idx]) + "…"
+                } else {
+                    return singleLine
+                }
+            }.joined(separator: "\n")
+
+            var message = "Added \(addedCount)"
+            if addedCount > 0 { message += "\n\n\(addedList)" }
+            if skippedCount > 0 {
+                message += "\n\nSkipped \(skippedCount)\n\n\(skippedList)"
+            }
+            duplicateSummaryMessage = message
+            showDuplicateSummary = true
+        }
+
+        // Only save/dismiss here for non-identifier/manual or barcode flows; identifier lookup saves on confirm from preview
+        if !(isManualEntry && useIdentifierLookup && !manualIdentifier.isEmpty) {
             do {
                 try viewContext.save()
             } catch {
                 let nsError = error as NSError
                 print("Unresolved error \(nsError), \(nsError.userInfo)")
             }
-
             if isManualEntry {
-                isPresented = false
+                withAnimation { isPresented = false }
             }
         }
     }
@@ -1093,4 +1187,84 @@ private let itemFormatter: DateFormatter = {
 
 #Preview {
     ContentView().environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+}
+
+// MARK: - Identifier Lookup Preview
+struct IdentifierLookupData {
+    let coverUrl: URL?
+    let artist: String?
+    let title: String?
+    let genre: String?
+    let year: String?
+    let tracklist: [DiscogsTrack]?
+    let notes: String?
+}
+
+struct IdentifierLookupPreviewView: View {
+    let preview: IdentifierLookupData
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let coverUrl = preview.coverUrl {
+                        AsyncImage(url: coverUrl) { image in
+                            image.resizable()
+                        } placeholder: {
+                            Color.gray
+                        }
+                        .aspectRatio(1, contentMode: .fit)
+                        .cornerRadius(8)
+                    } else {
+                        Image(systemName: "music.note")
+                            .font(.system(size: 80))
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 24)
+                    }
+                    
+                    Group {
+                        Text(preview.artist ?? "Unknown Artist")
+                            .font(.headline)
+                        Text(preview.title ?? "Unknown Album")
+                            .font(.title3)
+                        if let year = preview.year { Text(year).foregroundColor(.secondary) }
+                        if let genre = preview.genre { Text(genre).foregroundColor(.secondary) }
+                        if let notes = preview.notes, !notes.isEmpty {
+                            Text(notes).font(.footnote)
+                                .foregroundColor(.secondary)
+                                .padding(.top, 8)
+                        }
+                    }
+                    
+                    if let tracks = preview.tracklist, !tracks.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Tracks").font(.headline)
+                            ForEach(tracks, id: \.position) { track in
+                                HStack {
+                                    Text(track.position).foregroundColor(.secondary).frame(width: 30, alignment: .leading)
+                                    Text(track.title)
+                                    Spacer()
+                                    if !track.duration.isEmpty { Text(track.duration).foregroundColor(.secondary) }
+                                }
+                                Divider()
+                            }
+                        }
+                    }
+                }
+                .padding()
+            }
+            .navigationTitle("Confirm Album")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("Cancel") { onCancel() }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("Add") { onConfirm() }
+                        .accessibilityIdentifier("confirmIdentifierAdd")
+                }
+            }
+        }
+    }
 }

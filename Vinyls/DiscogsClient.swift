@@ -242,6 +242,51 @@ class DiscogsClient {
             releaseId: firstResult.id
         )
     }
+
+    func searchByIdentifier(_ identifier: String) async throws -> (coverUrl: URL?, artist: String?, title: String?, genre: String?, year: String?, releaseId: Int?) {
+        try await waitForRateLimit()
+
+        print("🔍 Searching Discogs for identifier (catno): \(identifier)")
+
+        var urlComponents = URLComponents(string: "\(baseUrl)/database/search")!
+        urlComponents.queryItems = [
+            URLQueryItem(name: "type", value: "release"),
+            URLQueryItem(name: "catno", value: identifier)
+        ]
+
+        guard let url = urlComponents.url else {
+            throw DiscogsError.invalidResponse
+        }
+
+        print("🌐 URL: \(url.absoluteString)")
+
+        let request = createRequest(for: url)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        try handleResponse(response)
+
+        let searchResponse = try JSONDecoder().decode(DiscogsSearchResponse.self, from: data)
+        print("📦 Found \(searchResponse.results.count) results for identifier")
+
+        guard let firstResult = searchResponse.results.first else {
+            print("❌ No results found for identifier: \(identifier)")
+            throw DiscogsError.noResults
+        }
+
+        let titleComponents = firstResult.title.split(separator: " - ", maxSplits: 1)
+        let artist = firstResult.artist ?? (titleComponents.count > 0 ? String(titleComponents[0]) : nil)
+        let title = titleComponents.count > 1 ? String(titleComponents[1]) : String(titleComponents[0])
+
+        print("✅ Found match: \(artist ?? "Unknown Artist") - \(title)")
+
+        return (
+            coverUrl: URL(string: firstResult.coverImage),
+            artist: artist,
+            title: title,
+            genre: firstResult.genre?.first,
+            year: firstResult.year,
+            releaseId: firstResult.id
+        )
+    }
 }
 
 // MARK: - Helpers
