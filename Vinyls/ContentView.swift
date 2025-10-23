@@ -411,6 +411,16 @@ struct RecordDetailView: View {
     @State private var tracks: [DiscogsTrack] = []
     @State private var currentArtworkURL: String = ""
     @State private var isEditing = false
+    @State private var isEditingNotesOnly = false
+    @State private var isEditingArtistOnly = false
+    @State private var isEditingAlbumOnly = false
+    @State private var isEditingYearOnly = false
+    @State private var isEditingGenreOnly = false
+    @FocusState private var isNotesFieldFocused: Bool
+    @FocusState private var isArtistFieldFocused: Bool
+    @FocusState private var isAlbumFieldFocused: Bool
+    @FocusState private var isYearFieldFocused: Bool
+    @FocusState private var isGenreFieldFocused: Bool
     @Environment(\.dismiss) private var dismiss
     @State private var showingDeleteConfirmation = false
     
@@ -474,7 +484,28 @@ struct RecordDetailView: View {
                             TextField("Artist", text: $editedArtist)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
                         } else {
-                            Text(item.artist ?? "Unknown")
+                            if isEditingArtistOnly {
+                                HStack(spacing: 8) {
+                                    TextField("Artist", text: $editedArtist)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .focused($isArtistFieldFocused)
+                                        .onSubmit { saveArtistOnly() }
+                                    Button { saveArtistOnly() } label: { Image(systemName: "checkmark.circle.fill") }
+                                        .buttonStyle(.plain)
+                                    Button {
+                                        editedArtist = item.artist ?? ""
+                                        isEditingArtistOnly = false
+                                    } label: { Image(systemName: "xmark.circle.fill") }
+                                        .buttonStyle(.plain)
+                                }
+                                .onAppear { isArtistFieldFocused = true }
+                            } else {
+                                Text(item.artist ?? "Unknown")
+                                    .onLongPressGesture {
+                                        editedArtist = item.artist ?? ""
+                                        isEditingArtistOnly = true
+                                    }
+                            }
                         }
                     }
                     
@@ -486,7 +517,28 @@ struct RecordDetailView: View {
                             TextField("Album Title", text: $editedAlbumTitle)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
                         } else {
-                            Text(item.albumTitle ?? "Unknown")
+                            if isEditingAlbumOnly {
+                                HStack(spacing: 8) {
+                                    TextField("Album Title", text: $editedAlbumTitle)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .focused($isAlbumFieldFocused)
+                                        .onSubmit { saveAlbumOnly() }
+                                    Button { saveAlbumOnly() } label: { Image(systemName: "checkmark.circle.fill") }
+                                        .buttonStyle(.plain)
+                                    Button {
+                                        editedAlbumTitle = item.albumTitle ?? ""
+                                        isEditingAlbumOnly = false
+                                    } label: { Image(systemName: "xmark.circle.fill") }
+                                        .buttonStyle(.plain)
+                                }
+                                .onAppear { isAlbumFieldFocused = true }
+                            } else {
+                                Text(item.albumTitle ?? "Unknown")
+                                    .onLongPressGesture {
+                                        editedAlbumTitle = item.albumTitle ?? ""
+                                        isEditingAlbumOnly = true
+                                    }
+                            }
                         }
                     }
                     
@@ -499,7 +551,29 @@ struct RecordDetailView: View {
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
                                 .keyboardType(.numberPad)
                         } else {
-                            Text(item.releaseYear > 0 ? String(item.releaseYear) : "Unknown")
+                            if isEditingYearOnly {
+                                HStack(spacing: 8) {
+                                    TextField("Year", text: $editedYear)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .keyboardType(.numberPad)
+                                        .focused($isYearFieldFocused)
+                                        .onSubmit { saveYearOnly() }
+                                    Button { saveYearOnly() } label: { Image(systemName: "checkmark.circle.fill") }
+                                        .buttonStyle(.plain)
+                                    Button {
+                                        editedYear = item.releaseYear > 0 ? String(item.releaseYear) : ""
+                                        isEditingYearOnly = false
+                                    } label: { Image(systemName: "xmark.circle.fill") }
+                                        .buttonStyle(.plain)
+                                }
+                                .onAppear { isYearFieldFocused = true }
+                            } else {
+                                Text(item.releaseYear > 0 ? String(item.releaseYear) : "Unknown")
+                                    .onLongPressGesture {
+                                        editedYear = item.releaseYear > 0 ? String(item.releaseYear) : ""
+                                        isEditingYearOnly = true
+                                    }
+                            }
                         }
                     }
                     
@@ -511,7 +585,28 @@ struct RecordDetailView: View {
                             TextField("Genre", text: $editedGenre)
                                 .textFieldStyle(RoundedBorderTextFieldStyle())
                         } else {
-                            Text(item.genre ?? "Unknown")
+                            if isEditingGenreOnly {
+                                HStack(spacing: 8) {
+                                    TextField("Genre", text: $editedGenre)
+                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                                        .focused($isGenreFieldFocused)
+                                        .onSubmit { saveGenreOnly() }
+                                    Button { saveGenreOnly() } label: { Image(systemName: "checkmark.circle.fill") }
+                                        .buttonStyle(.plain)
+                                    Button {
+                                        editedGenre = item.genre ?? ""
+                                        isEditingGenreOnly = false
+                                    } label: { Image(systemName: "xmark.circle.fill") }
+                                        .buttonStyle(.plain)
+                                }
+                                .onAppear { isGenreFieldFocused = true }
+                            } else {
+                                Text(item.genre ?? "Unknown")
+                                    .onLongPressGesture {
+                                        editedGenre = item.genre ?? ""
+                                        isEditingGenreOnly = true
+                                    }
+                            }
                         }
                     }
                     
@@ -520,10 +615,45 @@ struct RecordDetailView: View {
                             .fontWeight(.bold)
                             .frame(width: 80, alignment: .leading)
                         if isEditing {
-                            TextField("Notes", text: $editedNotes)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
+                            TextEditor(text: $editedNotes)
+                                .frame(minHeight: 100)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                )
                         } else {
-                            Text(item.notes ?? "None")
+                            if isEditingNotesOnly {
+                                HStack(spacing: 8) {
+                                    TextEditor(text: $editedNotes)
+                                        .frame(minHeight: 100)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .stroke(Color.gray.opacity(0.3), lineWidth: 1)
+                                        )
+                                        .focused($isNotesFieldFocused)
+                                        .onSubmit { saveNotesOnly() }
+                                    Button {
+                                        saveNotesOnly()
+                                    } label: {
+                                        Image(systemName: "checkmark.circle.fill")
+                                    }
+                                    .buttonStyle(.plain)
+                                    Button {
+                                        editedNotes = item.notes ?? ""
+                                        isEditingNotesOnly = false
+                                    } label: {
+                                        Image(systemName: "xmark.circle.fill")
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                                .onAppear { isNotesFieldFocused = true }
+                            } else {
+                                Text(item.notes ?? "None")
+                                    .onLongPressGesture {
+                                        editedNotes = item.notes ?? ""
+                                        isEditingNotesOnly = true
+                                    }
+                            }
                         }
                     }
                     
@@ -599,6 +729,15 @@ struct RecordDetailView: View {
         } message: {
             Text("This action cannot be undone. Are you sure you want to delete this album?")
         }
+        .onChange(of: isEditing) { oldValue, newValue in
+            if newValue {
+                isEditingNotesOnly = false
+                isEditingArtistOnly = false
+                isEditingAlbumOnly = false
+                isEditingYearOnly = false
+                isEditingGenreOnly = false
+            }
+        }
         .task {
             print("👁️ RecordDetailView appeared, checking if Discogs data needed")
             await refreshDiscogsData(forceRefresh: false)
@@ -621,6 +760,80 @@ struct RecordDetailView: View {
                 
                 try? context.save()
             }
+        }
+    }
+
+    private func saveNotesOnly() {
+        if let context = item.managedObjectContext {
+            context.perform {
+                item.notes = editedNotes.isEmpty ? nil : editedNotes
+                try? context.save()
+                DispatchQueue.main.async {
+                    isEditingNotesOnly = false
+                }
+            }
+        } else {
+            isEditingNotesOnly = false
+        }
+    }
+
+    private func saveArtistOnly() {
+        if let context = item.managedObjectContext {
+            context.perform {
+                item.artist = editedArtist.isEmpty ? nil : editedArtist
+                try? context.save()
+                DispatchQueue.main.async {
+                    isEditingArtistOnly = false
+                }
+            }
+        } else {
+            isEditingArtistOnly = false
+        }
+    }
+
+    private func saveAlbumOnly() {
+        if let context = item.managedObjectContext {
+            context.perform {
+                item.albumTitle = editedAlbumTitle.isEmpty ? nil : editedAlbumTitle
+                try? context.save()
+                DispatchQueue.main.async {
+                    isEditingAlbumOnly = false
+                }
+            }
+        } else {
+            isEditingAlbumOnly = false
+        }
+    }
+
+    private func saveYearOnly() {
+        if let context = item.managedObjectContext {
+            context.perform {
+                if let year = Int16(editedYear), year > 0 {
+                    item.releaseYear = year
+                } else {
+                    item.releaseYear = 0
+                }
+                try? context.save()
+                DispatchQueue.main.async {
+                    isEditingYearOnly = false
+                }
+            }
+        } else {
+            isEditingYearOnly = false
+        }
+    }
+
+    private func saveGenreOnly() {
+        if let context = item.managedObjectContext {
+            context.perform {
+                item.genre = editedGenre.isEmpty ? nil : editedGenre
+                try? context.save()
+                DispatchQueue.main.async {
+                    isEditingGenreOnly = false
+                }
+            }
+        } else {
+            isEditingGenreOnly = false
         }
     }
     
