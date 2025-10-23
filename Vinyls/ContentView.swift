@@ -19,6 +19,7 @@ struct ContentView: View {
     @State private var searchText = ""
     @State private var sortOption = SortOption.artistAsc
     @State private var viewMode = ViewMode.grid
+    @StateObject private var importManager = BackgroundImportManager.shared
     
     enum ViewMode {
         case list
@@ -58,6 +59,61 @@ struct ContentView: View {
             return [SortDescriptor(\Item.timestamp, order: .forward)]
         }
     }
+
+    // Whether current sort is alphabetical (artist or album)
+    var isAlphaSort: Bool {
+        switch sortOption {
+        case .artistAsc, .artistDesc, .albumAsc, .albumDesc:
+            return true
+        default:
+            return false
+        }
+    }
+
+    // Determine section key (first letter) based on current alpha sort key
+    private func sectionKeyForItem(_ item: Item) -> String {
+        let raw: String = {
+            switch sortOption {
+            case .artistAsc, .artistDesc:
+                return item.artist?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            case .albumAsc, .albumDesc:
+                return item.albumTitle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            default:
+                return item.artist?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            }
+        }()
+        guard !raw.isEmpty else { return "#" }
+        let scalars = raw.unicodeScalars
+        guard let first = scalars.first else { return "#" }
+        if CharacterSet.letters.contains(first) {
+            return String(raw.prefix(1)).uppercased()
+        }
+        return "#"
+    }
+
+    // Build ordered sections from fetched items, preserving overall sort order
+    private var sectionedItems: [(key: String, items: [Item])] {
+        var sections: [(String, [Item])] = []
+        var currentKey: String? = nil
+        var currentItems: [Item] = []
+        for item in items {
+            let key = sectionKeyForItem(item)
+            if currentKey == nil {
+                currentKey = key
+                currentItems = [item]
+            } else if key == currentKey {
+                currentItems.append(item)
+            } else {
+                sections.append((currentKey!, currentItems))
+                currentKey = key
+                currentItems = [item]
+            }
+        }
+        if let currentKey = currentKey {
+            sections.append((currentKey, currentItems))
+        }
+        return sections
+    }
     
     var searchPredicate: NSPredicate? {
         if searchText.isEmpty {
@@ -81,9 +137,119 @@ struct ContentView: View {
         items.sortDescriptors = sortDescriptors
     }
 
+    // MARK: - Extracted content to reduce type-checking complexity
+    private var recordsContent: some View {
+        Group {
+            if viewMode == .list {
+                listContent
+            } else {
+                gridContent
+            }
+        }
+    }
+
+    private var listContent: some View {
+        Group {
+            if isAlphaSort {
+                listAlphaContent
+            } else {
+                listSimpleContent
+            }
+        }
+    }
+
+    private var gridContent: some View {
+        Group {
+            if isAlphaSort {
+                gridAlphaContent
+            } else {
+                gridSimpleContent
+            }
+        }
+    }
+
+    private var listAlphaContent: some View {
+        List {
+            ForEach(sectionedItems, id: \.key) { section in
+                Section(header: Text(section.key)) {
+                    ForEach(section.items) { item in
+                        NavigationLink {
+                            RecordDetailView(item: item)
+                        } label: {
+                            RecordRowView(item: item)
+                        }
+                    }
+                    .onDelete { offsets in
+                        deleteItems(offsets: offsets, in: section.items)
+                    }
+                }
+            }
+        }
+    }
+
+    private var listSimpleContent: some View {
+        List {
+            ForEach(items) { item in
+                NavigationLink {
+                    RecordDetailView(item: item)
+                } label: {
+                    RecordRowView(item: item)
+                }
+            }
+            .onDelete(perform: deleteItems)
+        }
+    }
+
+    private var gridAlphaContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                ForEach(sectionedItems, id: \.key) { section in
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(section.key)
+                            .font(.headline)
+                            .padding(.leading, 4)
+                        LazyVGrid(columns: [
+                            GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 16)
+                        ], spacing: 16) {
+                            ForEach(section.items) { item in
+                                RecordGridItemView(item: item)
+                            }
+                        }
+                    }
+                }
+            }
+            .padding()
+        }
+    }
+
+    private var gridSimpleContent: some View {
+        ScrollView {
+            LazyVGrid(columns: [
+                GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 16)
+            ], spacing: 16) {
+                ForEach(items) { item in
+                    RecordGridItemView(item: item)
+                }
+            }
+            .padding()
+        }
+    }
+
     var body: some View {
         NavigationView {
             VStack {
+                if importManager.isImporting {
+                    HStack(spacing: 12) {
+                        ProgressView(value: importManager.progress)
+                            .progressViewStyle(LinearProgressViewStyle())
+                            .frame(maxWidth: .infinity)
+                        Text("\(importManager.completed)/\(importManager.total)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 6)
+                }
                 // Search bar
                 HStack {
                     Image(systemName: "magnifyingglass")
@@ -131,31 +297,7 @@ struct ContentView: View {
                 .padding(.horizontal)
                 
                 // Records view
-                Group {
-                    if viewMode == .list {
-                        List {
-                            ForEach(items) { item in
-                                NavigationLink {
-                                    RecordDetailView(item: item)
-                                } label: {
-                                    RecordRowView(item: item)
-                                }
-                            }
-                            .onDelete(perform: deleteItems)
-                        }
-                    } else {
-                        ScrollView {
-                            LazyVGrid(columns: [
-                                GridItem(.adaptive(minimum: 150, maximum: 200), spacing: 16)
-                            ], spacing: 16) {
-                                ForEach(items) { item in
-                                    RecordGridItemView(item: item)
-                                }
-                            }
-                            .padding()
-                        }
-                    }
-                }
+                recordsContent
             }
             .toolbar {
                 ToolbarItem {
@@ -221,6 +363,19 @@ struct ContentView: View {
             }
         }
     }
+
+	private func deleteItems(offsets: IndexSet, in sectionItems: [Item]) {
+		withAnimation {
+			offsets.map { sectionItems[$0] }.forEach(viewContext.delete)
+
+			do {
+				try viewContext.save()
+			} catch {
+				let nsError = error as NSError
+				fatalError("Unresolved error \(nsError), \(nsError.userInfo)")
+			}
+		}
+	}
 
     private func deleteAllItems() {
         withAnimation {
@@ -1274,3 +1429,5 @@ struct IdentifierLookupPreviewView: View {
         }
     }
 }
+
+ 

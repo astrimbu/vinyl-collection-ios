@@ -6,6 +6,7 @@ struct ImportCSVView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @Environment(\.dismiss) private var dismiss
     @StateObject private var discogsService = DiscogsService.shared
+    @StateObject private var importManager = BackgroundImportManager.shared
     
     @State private var isImporting = false
     @State private var importedCount = 0
@@ -192,7 +193,9 @@ struct ImportCSVView: View {
                 
                 // Start background fetch of Discogs data
                 Task(priority: .background) {
+                    await MainActor.run { importManager.start(total: importedItems.count) }
                     await fetchDiscogsDataInBackground(for: importedItems)
+                    await MainActor.run { importManager.finish() }
                 }
                 
                 // Show success message and dismiss
@@ -243,7 +246,8 @@ struct ImportCSVView: View {
                 try? viewContext.save()
             }
             
-            // Respect rate limits by waiting between requests
+            // Mark progress and respect rate limits by waiting between requests
+            await MainActor.run { importManager.increment() }
             try? await Task.sleep(nanoseconds: 1_000_000_000) // 1 second delay between requests
         }
     }

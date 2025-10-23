@@ -57,6 +57,7 @@ class DiscogsClient {
     private let queue = DispatchQueue(label: "com.vinyls.discogs.ratelimit")
     private var requestHistory: [Date] = []
     private let maxRequestsPerMinute = 60
+    private var nextAvailableDate: Date? = nil
     
     init(token: String) {
         self.token = token
@@ -69,6 +70,14 @@ class DiscogsClient {
             queue.async {
                 // Clean up old requests
                 let now = Date()
+                // If we previously computed a next-available time (e.g., after a 429), honor it here
+                if let next = self.nextAvailableDate, now < next {
+                    let waitTime = next.timeIntervalSince(now)
+                    if waitTime > 0 {
+                        Thread.sleep(forTimeInterval: waitTime)
+                    }
+                    self.nextAvailableDate = nil
+                }
                 self.requestHistory = self.requestHistory.filter { now.timeIntervalSince($0) < 60 }
                 
                 if self.requestHistory.count >= self.maxRequestsPerMinute {
@@ -83,6 +92,75 @@ class DiscogsClient {
                 
                 self.requestHistory.append(now)
                 continuation.resume()
+            }
+        }
+    }
+    
+    // Centralized request executor with 429 backoff/retry
+    private func performRequest(_ request: URLRequest, maxRetries: Int = 3) async throws -> (Data, URLResponse) {
+        func header(_ response: HTTPURLResponse, _ name: String) -> String? {
+            for (key, value) in response.allHeaderFields {
+                if let k = key as? String, k.caseInsensitiveCompare(name) == .orderedSame {
+                    return String(describing: value)
+                }
+            }
+            return nil
+        }
+        var attempt = 0
+        while true {
+            try await waitForRateLimit()
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                guard let httpResponse = response as? HTTPURLResponse else {
+                    print("❌ Invalid response type: \(response)")
+                    throw DiscogsError.invalidResponse
+                }
+                
+                print("📥 Response status code: \(httpResponse.statusCode)")
+                print("📤 Response headers: \(httpResponse.allHeaderFields)")
+                
+                switch httpResponse.statusCode {
+                case 200:
+                    // Proactively pause if remaining is 0 to avoid hitting 429 on the next call
+                    if let remainingStr = header(httpResponse, "x-discogs-ratelimit-remaining"),
+                       let remaining = Int(remainingStr), remaining <= 0 {
+                        let now = Date()
+                        // No reset header provided; be conservative and wait up to 60s
+                        self.nextAvailableDate = now.addingTimeInterval(60)
+                    }
+                    return (data, response)
+                case 401:
+                    print("❌ Unauthorized - Token: \(token.prefix(5))...****")
+                    throw DiscogsError.unauthorized
+                case 429:
+                    // Determine how long to wait
+                    let now = Date()
+                    var waitSeconds: TimeInterval = 60 // conservative default
+                    if let retryAfterStr = header(httpResponse, "Retry-After"),
+                       let retryAfter = TimeInterval(retryAfterStr) {
+                        waitSeconds = max(retryAfter, 1)
+                    } else if let remainingStr = header(httpResponse, "x-discogs-ratelimit-remaining"),
+                              let remaining = Int(remainingStr), remaining <= 0 {
+                        waitSeconds = 60
+                    }
+                    self.nextAvailableDate = now.addingTimeInterval(waitSeconds)
+                    attempt += 1
+                    if attempt > maxRetries {
+                        print("❌ Rate limit exceeded after \(maxRetries) retries")
+                        throw DiscogsError.rateLimitExceeded
+                    }
+                    print("⏳ Rate limited (429). Waiting \(Int(waitSeconds))s before retry \(attempt)/\(maxRetries)...")
+                    try await Task.sleep(nanoseconds: UInt64(waitSeconds * 1_000_000_000))
+                    continue
+                default:
+                    print("❌ Unexpected status code: \(httpResponse.statusCode)")
+                    throw DiscogsError.invalidResponse
+                }
+            } catch let error as DiscogsError {
+                throw error
+            } catch {
+                // Bubble up network errors
+                throw DiscogsError.networkError(error)
             }
         }
     }
@@ -153,8 +231,7 @@ class DiscogsClient {
         print("🌐 URL: \(url.absoluteString)")
         
         let request = createRequest(for: url)
-        let (data, response) = try await URLSession.shared.data(for: request)
-        try handleResponse(response)
+        let (data, _) = try await performRequest(request)
         
         let searchResponse = try JSONDecoder().decode(DiscogsSearchResponse.self, from: data)
         print("📦 Found \(searchResponse.results.count) results")
@@ -184,8 +261,7 @@ class DiscogsClient {
         print("🌐 URL: \(url.absoluteString)")
         
         let request = createRequest(for: url)
-        let (data, response) = try await URLSession.shared.data(for: request)
-        try handleResponse(response)
+        let (data, _) = try await performRequest(request)
         
         let release = try JSONDecoder().decode(DiscogsRelease.self, from: data)
         print("📦 Found \(release.tracklist.count) tracks")
@@ -215,8 +291,7 @@ class DiscogsClient {
         print("🌐 URL: \(url.absoluteString)")
         
         let request = createRequest(for: url)
-        let (data, response) = try await URLSession.shared.data(for: request)
-        try handleResponse(response)
+        let (data, _) = try await performRequest(request)
         
         let searchResponse = try JSONDecoder().decode(DiscogsSearchResponse.self, from: data)
         print("📦 Found \(searchResponse.results.count) results")
@@ -261,8 +336,7 @@ class DiscogsClient {
         print("🌐 URL: \(url.absoluteString)")
 
         let request = createRequest(for: url)
-        let (data, response) = try await URLSession.shared.data(for: request)
-        try handleResponse(response)
+        let (data, _) = try await performRequest(request)
 
         let searchResponse = try JSONDecoder().decode(DiscogsSearchResponse.self, from: data)
         print("📦 Found \(searchResponse.results.count) results for identifier")
