@@ -4,6 +4,9 @@
 //
 
 import SwiftUI
+import PhotosUI
+import Photos
+import UIKit
 import CoreData
 
 // @_exported import struct DiscogsClient.DiscogsTrack
@@ -410,6 +413,13 @@ struct RecordDetailView: View {
     @StateObject private var discogsService = DiscogsService.shared
     @State private var tracks: [DiscogsTrack] = []
     @State private var currentArtworkURL: String = ""
+    @State private var selectedPhotoItem: PhotosPickerItem? = nil
+    @Namespace private var artworkNamespace
+    @State private var isZoomedArtwork = false
+    @State private var zoomDragOffset: CGSize = .zero
+    @State private var isShowingPhotoPickerSheet = false
+    @State private var isShowingSaveDialog = false
+    @State private var isSavingToPhotos = false
     @State private var isEditing = false
     @State private var isEditingNotesOnly = false
     @State private var isEditingArtistOnly = false
@@ -442,6 +452,10 @@ struct RecordDetailView: View {
         _editedNotes = State(initialValue: item.notes ?? "")
     }
     
+    private var artworkMatchedId: String {
+        "artwork-\(item.objectID.uriRepresentation().absoluteString)"
+    }
+    
     var body: some View {
         ScrollView {
             VStack(alignment: .center, spacing: 20) {
@@ -460,19 +474,31 @@ struct RecordDetailView: View {
                     .padding(.horizontal)
                 }
                 
-                if currentArtworkURL != "" {
-                    AsyncImage(url: URL(string: currentArtworkURL)) { image in
-                        image.resizable()
-                    } placeholder: {
-                        Color.gray
-                    }
+                AlbumArtworkView(urlString: currentArtworkURL)
                     .aspectRatio(contentMode: .fit)
                     .frame(height: 300)
                     .cornerRadius(8)
-                } else {
-                    Image(systemName: "music.note")
-                        .font(.system(size: 120))
-                        .frame(height: 300)
+                    .matchedGeometryEffect(id: artworkMatchedId, in: artworkNamespace)
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                            isZoomedArtwork = true
+                        }
+                    }
+                    .onLongPressGesture {
+                        // Long-press shortcut to replace artwork
+                        isShowingPhotoPickerSheet = true
+                    }
+
+                if isEditing {
+                    PhotosPicker(selection: $selectedPhotoItem, matching: .images, preferredItemEncoding: .automatic) {
+                        HStack {
+                            Image(systemName: "photo")
+                            Text("Replace Artwork")
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.bordered)
+                    .padding(.horizontal)
                 }
                 
                 VStack(alignment: .leading, spacing: 12) {
@@ -738,6 +764,86 @@ struct RecordDetailView: View {
                 isEditingGenreOnly = false
             }
         }
+        .onChange(of: selectedPhotoItem) { oldValue, newValue in
+            Task { await handleSelectedPhoto(newValue) }
+        }
+        .overlay(alignment: .center) {
+            if isZoomedArtwork {
+                ZStack {
+                    Rectangle()
+                        .fill(.ultraThinMaterial)
+                        .ignoresSafeArea()
+                        .onTapGesture {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                                isZoomedArtwork = false
+                                zoomDragOffset = .zero
+                            }
+                        }
+                    GeometryReader { proxy in
+                        AlbumArtworkView(urlString: currentArtworkURL)
+                            .matchedGeometryEffect(id: artworkMatchedId, in: artworkNamespace)
+                            .scaledToFit()
+                            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .center)
+                            .offset(zoomDragOffset)
+                            .scaleEffect(zoomScaleFor(offset: zoomDragOffset))
+                            .gesture(
+                                DragGesture()
+                                    .onChanged { value in
+                                        zoomDragOffset = value.translation
+                                    }
+                                    .onEnded { value in
+                                        let vertical = value.translation.height
+                                        let threshold: CGFloat = 140
+                                        if abs(vertical) > threshold {
+                                            withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                                                isZoomedArtwork = false
+                                                zoomDragOffset = .zero
+                                            }
+                                        } else {
+                                            withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                                                zoomDragOffset = .zero
+                                            }
+                                        }
+                                    }
+                            )
+                            .simultaneousGesture(
+                                LongPressGesture(minimumDuration: 0.5).onEnded { _ in
+                                    isShowingSaveDialog = true
+                                }
+                            )
+                            .onTapGesture {
+                                withAnimation(.spring(response: 0.35, dampingFraction: 0.9)) {
+                                    isZoomedArtwork = false
+                                    zoomDragOffset = .zero
+                                }
+                            }
+                    }
+                    .ignoresSafeArea()
+                }
+                .transition(.opacity)
+            }
+        }
+        .confirmationDialog("Artwork", isPresented: $isShowingSaveDialog) {
+            Button("Save Image to Photos") {
+                Task { await saveZoomedImageToPhotos() }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .sheet(isPresented: $isShowingPhotoPickerSheet) {
+            PhotoPickerView { image in
+                Task {
+                    if let image = image, let data = image.jpegData(compressionQuality: 0.9) {
+                        do {
+                            let fileURL = try saveArtworkData(data)
+                            await updateCoverArt(with: fileURL)
+                        } catch {
+                            print("❌ Failed to save picked image: \(error)")
+                        }
+                    }
+                    isShowingPhotoPickerSheet = false
+                }
+            }
+        }
         .task {
             print("👁️ RecordDetailView appeared, checking if Discogs data needed")
             await refreshDiscogsData(forceRefresh: false)
@@ -920,6 +1026,79 @@ struct RecordDetailView: View {
                     print("💾 Updated cover art URL in Core Data")
                 }
             }
+        }
+    }
+
+    private func handleSelectedPhoto(_ item: PhotosPickerItem?) async {
+        guard let item = item else { return }
+        do {
+            if let data = try await item.loadTransferable(type: Data.self) {
+                if let image = UIImage(data: data), let jpegData = image.jpegData(compressionQuality: 0.9) {
+                    let fileURL = try saveArtworkData(jpegData)
+                    await updateCoverArt(with: fileURL)
+                } else {
+                    // Fallback: write original data if convertible failed
+                    let fileURL = try saveArtworkData(data)
+                    await updateCoverArt(with: fileURL)
+                }
+            }
+        } catch {
+            print("❌ Failed to load selected photo: \(error)")
+        }
+    }
+
+    private func saveArtworkData(_ data: Data) throws -> URL {
+        let fileManager = FileManager.default
+        let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+        let artworkDir = documentsURL.appendingPathComponent("Artwork", isDirectory: true)
+        if !fileManager.fileExists(atPath: artworkDir.path) {
+            try fileManager.createDirectory(at: artworkDir, withIntermediateDirectories: true)
+        }
+        let filename = UUID().uuidString + ".jpg"
+        let destination = artworkDir.appendingPathComponent(filename)
+        try data.write(to: destination, options: .atomic)
+        return destination
+    }
+
+    private func updateCoverArt(with fileURL: URL) async {
+        guard let context = item.managedObjectContext else { return }
+        await context.perform {
+            let fileManager = FileManager.default
+            if let existing = item.coverArtURL, let existingURL = URL(string: existing), existingURL.isFileURL {
+                try? fileManager.removeItem(at: existingURL)
+            }
+            item.coverArtURL = fileURL.absoluteString
+            try? context.save()
+            DispatchQueue.main.async {
+                currentArtworkURL = fileURL.absoluteString
+            }
+        }
+    }
+    
+    private func zoomScaleFor(offset: CGSize) -> CGFloat {
+        let distance = sqrt(offset.width * offset.width + offset.height * offset.height)
+        let maxDistance: CGFloat = 300
+        let clamped = min(distance, maxDistance)
+        return 1.0 - (clamped / (maxDistance * 5))
+    }
+
+    private func saveZoomedImageToPhotos() async {
+        guard !isSavingToPhotos else { return }
+        isSavingToPhotos = true
+        defer { isSavingToPhotos = false }
+        guard let url = URL(string: currentArtworkURL) else { return }
+        do {
+            let data: Data
+            if url.isFileURL {
+                data = try Data(contentsOf: url)
+            } else {
+                let (fetched, _) = try await URLSession.shared.data(from: url)
+                data = fetched
+            }
+            guard let image = UIImage(data: data) else { return }
+            UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+        } catch {
+            print("❌ Failed to save image to Photos: \(error)")
         }
     }
 }
@@ -1434,13 +1613,9 @@ struct RecordRowView: View {
                     .progressViewStyle(.circular)
                     .frame(width: 50, height: 50)
             } else {
-                AsyncImage(url: URL(string: item.coverArtURL ?? "")) { image in
-                    image.resizable()
-                } placeholder: {
-                    Color.gray
-                }
-                .frame(width: 50, height: 50)
-                .cornerRadius(4)
+                AlbumArtworkView(urlString: item.coverArtURL)
+                    .frame(width: 50, height: 50)
+                    .cornerRadius(4)
             }
             
             VStack(alignment: .leading) {
@@ -1485,12 +1660,8 @@ struct RecordGridItemView: View {
                             .aspectRatio(1, contentMode: .fill)
                             .background(Color.gray.opacity(0.2))
                     } else {
-                        AsyncImage(url: URL(string: item.coverArtURL ?? "")) { image in
-                            image.resizable()
-                        } placeholder: {
-                            Color.gray
-                        }
-                        .aspectRatio(1, contentMode: .fill)
+                        AlbumArtworkView(urlString: item.coverArtURL)
+                            .aspectRatio(1, contentMode: .fill)
                     }
                     
                     // Text overlay with gradient background
@@ -1539,6 +1710,135 @@ struct RecordGridItemView: View {
             }
         } message: {
             Text("This action cannot be undone. Are you sure you want to delete this album?")
+        }
+    }
+}
+
+// Renders album artwork from either a remote URL or a local file URL
+struct AlbumArtworkView: View {
+    let urlString: String?
+    
+    var body: some View {
+        if let urlString = urlString, !urlString.isEmpty, let url = URL(string: urlString) {
+            if url.isFileURL {
+                if let data = try? Data(contentsOf: url), let image = UIImage(data: data) {
+                    Image(uiImage: image)
+                        .resizable()
+                } else {
+                    Color.gray
+                }
+            } else {
+                AsyncImage(url: url) { image in
+                    image.resizable()
+                } placeholder: {
+                    Color.gray
+                }
+            }
+        } else {
+            Image(systemName: "music.note")
+                .font(.system(size: 120))
+                .frame(maxWidth: .infinity)
+                .background(Color.gray.opacity(0.2))
+        }
+    }
+}
+
+// Full-screen artwork with long-press save to Photos
+struct FullScreenArtworkView: View {
+    let urlString: String
+    let onDismiss: () -> Void
+    @State private var showingSaveDialog = false
+    @State private var isSaving = false
+    
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            VStack(spacing: 0) {
+                HStack {
+                    Spacer()
+                    Button(action: onDismiss) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 28))
+                            .foregroundColor(.white.opacity(0.9))
+                            .padding()
+                    }
+                }
+                Spacer(minLength: 0)
+                AlbumArtworkView(urlString: urlString)
+                    .scaledToFit()
+                    .onLongPressGesture {
+                        showingSaveDialog = true
+                    }
+                Spacer(minLength: 0)
+            }
+        }
+        .confirmationDialog("Artwork", isPresented: $showingSaveDialog) {
+            Button("Save Image to Photos") {
+                Task { await saveImageToPhotos() }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+    
+    private func saveImageToPhotos() async {
+        guard !isSaving else { return }
+        isSaving = true
+        defer { isSaving = false }
+        guard let url = URL(string: urlString) else { return }
+        do {
+            let data: Data
+            if url.isFileURL {
+                data = try Data(contentsOf: url)
+            } else {
+                let (fetched, _) = try await URLSession.shared.data(from: url)
+                data = fetched
+            }
+            guard let image = UIImage(data: data) else { return }
+            UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
+        } catch {
+            print("❌ Failed to save image to Photos: \(error)")
+        }
+    }
+}
+
+// UIKit wrapper to present native Photos picker immediately in a sheet
+struct PhotoPickerView: UIViewControllerRepresentable {
+    typealias UIViewControllerType = PHPickerViewController
+    let onPicked: (UIImage?) -> Void
+    
+    func makeUIViewController(context: Context) -> PHPickerViewController {
+        var config = PHPickerConfiguration(photoLibrary: .shared())
+        config.filter = .images
+        config.selectionLimit = 1
+        let picker = PHPickerViewController(configuration: config)
+        picker.delegate = context.coordinator
+        return picker
+    }
+    
+    func updateUIViewController(_ uiViewController: PHPickerViewController, context: Context) {}
+    
+    func makeCoordinator() -> Coordinator { Coordinator(onPicked: onPicked) }
+    
+    class Coordinator: NSObject, PHPickerViewControllerDelegate {
+        let onPicked: (UIImage?) -> Void
+        init(onPicked: @escaping (UIImage?) -> Void) { self.onPicked = onPicked }
+        func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
+            guard let provider = results.first?.itemProvider else {
+                picker.dismiss(animated: true)
+                self.onPicked(nil)
+                return
+            }
+            if provider.canLoadObject(ofClass: UIImage.self) {
+                provider.loadObject(ofClass: UIImage.self) { object, _ in
+                    DispatchQueue.main.async {
+                        picker.dismiss(animated: true)
+                        self.onPicked(object as? UIImage)
+                    }
+                }
+            } else {
+                picker.dismiss(animated: true)
+                self.onPicked(nil)
+            }
         }
     }
 }

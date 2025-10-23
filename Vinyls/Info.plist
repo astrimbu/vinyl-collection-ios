@@ -12,5 +12,9 @@
 	<string>$(GOOGLE_CLIENT_SECRET)</string>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Allow Vinyls to access your photos to set album artwork.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Allow Vinyls to save album artwork images to your Photos.</string>
 </dict>
 </plist>

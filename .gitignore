@@ -35,6 +35,8 @@ DerivedData/
 
 # Reference files
 *.js
+COLLECTOR_FEATURES.md
+PRODUCTION_CONSIDERATIONS.md
 
 # Swift Package Manager
 .build/
