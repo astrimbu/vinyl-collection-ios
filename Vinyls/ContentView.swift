@@ -346,7 +346,10 @@ struct ContentView: View {
             Text("Select a record to view details")
         }
         .sheet(isPresented: $showingAddRecordSheet) {
-            AddRecordView(isPresented: $showingAddRecordSheet)
+            AddRecordView(isPresented: $showingAddRecordSheet, onDidAdd: { _ in
+                // After adding, switch to "Date Added (Newest)" so new items are visible at the top
+                sortOption = .dateAddedDesc
+            })
                 .environment(\.managedObjectContext, viewContext)
         }
         .sheet(isPresented: $showingImportCSVSheet) {
@@ -1126,6 +1129,7 @@ struct AddRecordView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @Binding var isPresented: Bool
     @StateObject private var discogsService = DiscogsService.shared
+    let onDidAdd: ([Item]) -> Void
     
     @State private var showingBarcodeScanner = false
     @State private var isManualEntry = false
@@ -1254,6 +1258,8 @@ struct AddRecordView: View {
                                 let nsError = error as NSError
                                 print("Unresolved error \(nsError), \(nsError.userInfo)")
                             }
+                            // Notify parent view so it can adjust sorting
+                            onDidAdd([newItem])
                             showingIdentifierPreview = false
                             withAnimation { isPresented = false }
                         },
@@ -1374,6 +1380,7 @@ struct AddRecordView: View {
     }
     
     private func addRecords() async {
+        var newlyAdded: [Item] = []
         if isManualEntry {
             if useIdentifierLookup, !manualIdentifier.isEmpty {
                 // Lookup via Discogs using identifier and present preview instead of saving immediately
@@ -1407,6 +1414,7 @@ struct AddRecordView: View {
                 } else {
                     newItem.releaseYear = 0
                 }
+                newlyAdded.append(newItem)
             }
         } else {
             // Add scanned records
@@ -1477,6 +1485,7 @@ struct AddRecordView: View {
                 addedCount += 1
                 let display = "\(artist) - \(title)"
                 addedDisplays.append(display)
+                newlyAdded.append(newItem)
             }
 
             let skippedCount = skippedBarcodes.count
@@ -1516,6 +1525,9 @@ struct AddRecordView: View {
             } catch {
                 let nsError = error as NSError
                 print("Unresolved error \(nsError), \(nsError.userInfo)")
+            }
+            if !newlyAdded.isEmpty {
+                onDidAdd(newlyAdded)
             }
             if isManualEntry {
                 withAnimation { isPresented = false }
