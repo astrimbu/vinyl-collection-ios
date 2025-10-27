@@ -176,7 +176,7 @@ struct ImportCSVView: View {
                     }
                 }
                 
-                // Set the notes
+                // Set the notes from CSV if provided
                 if let idx = notesIndex, idx < columns.count {
                     let notesText = columns[idx].trimmingCharacters(in: .whitespacesAndNewlines)
                     if !notesText.isEmpty {
@@ -212,7 +212,7 @@ struct ImportCSVView: View {
         
         for item in items {
             // Fetch Discogs data
-            let (artworkUrl, tracks, genre, year, notes) = await discogsService.fetchAlbumDetails(
+            let (artworkUrl, tracks, genre, year, _) = await discogsService.fetchAlbumDetails(
                 artist: item.artist ?? "",
                 title: item.albumTitle ?? ""
             )
@@ -239,9 +239,7 @@ struct ImportCSVView: View {
                 if item.releaseYear == 0, let yearStr = year, let yearInt = Int16(yearStr) {
                     item.releaseYear = yearInt
                 }
-                if item.notes == nil {
-                    item.notes = notes
-                }
+                // Intentionally do not set notes from Discogs; leave for user to add
                 
                 try? viewContext.save()
             }

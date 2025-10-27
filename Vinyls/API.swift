@@ -2,31 +2,24 @@ import Foundation
 import OSLog
 
 enum API {
-    static var discogsToken: String {
-        print("🎯 Getting Discogs token...")
-        
+    static let discogsToken: String = {
+        // Compute once to avoid repeated logs on frequent view updates
         #if DEBUG
-        print("🐛 Debug mode: checking environment variables first")
-        // In debug, first try to get from environment
         if let token = ProcessInfo.processInfo.environment["DISCOGS_API_TOKEN"] {
-            print("✅ Found Discogs token in environment variables: \(token.prefix(5))...")
+            print("🔑 Discogs token loaded from environment (\(token.prefix(5))…)")
             return token
         }
-        print("⚠️ No Discogs token found in environment variables")
         #endif
-        
-        // For release builds, this should be set in Info.plist
         do {
-            print("📱 Attempting to load token from Info.plist")
             let token: String = try Configuration.value(for: "DISCOGS_API_TOKEN")
-            print("✅ Found Discogs token in Info.plist: \(String(describing: token).prefix(5))...")
+            print("🔑 Discogs token loaded from Info.plist (\(token.prefix(5))…)")
             return token
         } catch {
-            print("❌ Failed to get Discogs token: \(error). Continuing with empty token; Discogs calls will be disabled.")
+            print("❌ Failed to get Discogs token: \(error). Discogs calls will be disabled.")
             return ""
         }
-    }
-
+    }()
+    
     static var googleClientId: String {
         #if DEBUG
         if let id = ProcessInfo.processInfo.environment["GOOGLE_CLIENT_ID"] {

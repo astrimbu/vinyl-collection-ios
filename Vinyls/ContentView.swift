@@ -997,7 +997,7 @@ struct RecordDetailView: View {
         
         // If we get here, we need to fetch from Discogs
         print("🔍 Fetching Discogs data for: \(artist) - \(title)")
-        let (artworkUrl, fetchedTracks, genre, year, notes) = await discogsService.fetchAlbumDetails(
+        let (artworkUrl, fetchedTracks, genre, year, _) = await discogsService.fetchAlbumDetails(
             artist: artist,
             title: title
         )
@@ -1022,9 +1022,7 @@ struct RecordDetailView: View {
                         if item.releaseYear == 0, let yearStr = year, let yearInt = Int16(yearStr) {
                             item.releaseYear = yearInt
                         }
-                        if item.notes == nil {
-                            item.notes = notes
-                        }
+                        // Intentionally do not set notes from Discogs; leave for user to add
                         
                         try? context.save()
                         print("💾 Updated tracks data and additional fields in Core Data")
@@ -1233,7 +1231,7 @@ struct AddRecordView: View {
                             newItem.artist = preview.artist ?? (manualArtist.isEmpty ? nil : manualArtist)
                             newItem.albumTitle = preview.title ?? (manualTitle.isEmpty ? nil : manualTitle)
                             newItem.genre = preview.genre ?? (manualGenre.isEmpty ? nil : manualGenre)
-                            newItem.notes = preview.notes ?? (manualNotes.isEmpty ? nil : manualNotes)
+                            newItem.notes = manualNotes.isEmpty ? nil : manualNotes
                             if let yearStr = preview.year, let year = Int16(yearStr) {
                                 newItem.releaseYear = year
                             } else if let year = Int16(manualYear), year > 0 {
@@ -1390,7 +1388,7 @@ struct AddRecordView: View {
                         genre: result.genre,
                         year: result.year,
                         tracklist: result.tracklist,
-                        notes: result.notes
+                        notes: nil
                     )
                     showingIdentifierPreview = true
                 }
@@ -1454,7 +1452,6 @@ struct AddRecordView: View {
                 newItem.artist = artist
                 newItem.albumTitle = title
                 newItem.genre = result.genre
-                newItem.notes = result.notes
                 newItem.identifier = barcode
 
                 if let yearStr = result.year, let year = Int16(yearStr) {
