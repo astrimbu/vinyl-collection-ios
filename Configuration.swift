@@ -69,8 +69,8 @@ enum API {
             print("✅ Found Discogs token in Info.plist: \(String(describing: token).prefix(5))...")
             return token
         } catch {
-            print("❌ Failed to get Discogs token: \(error)")
-            fatalError("Discogs API token not found. Make sure it's set in environment or Info.plist")
+            print("❌ Failed to get Discogs token: \(error). Continuing with empty token; Discogs calls will be disabled.")
+            return ""
         }
     }
 } 

@@ -73,6 +73,11 @@ struct ContentView: View {
         }
     }
 
+    // Credential availability checks
+    private var isDiscogsConfigured: Bool {
+        !API.discogsToken.isEmpty
+    }
+
     // Determine section key (first letter) based on current alpha sort key
     private func sectionKeyForItem(_ item: Item) -> String {
         let raw: String = {
@@ -300,6 +305,18 @@ struct ContentView: View {
                 .padding(.horizontal)
                 
                 // Records view
+                
+                if !isDiscogsConfigured {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                        Text("Discogs lookups disabled: missing API token")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 2)
+                }
                 recordsContent
             }
             .toolbar {
@@ -969,7 +986,11 @@ struct RecordDetailView: View {
             if hasStoredArtwork && hasStoredTracks {
                 print("📦 Using stored local data for: \(artist) - \(title)")
                 currentArtworkURL = item.coverArtURL!
-                tracks = try! JSONDecoder().decode([DiscogsTrack].self, from: item.tracklist!)
+                if let data = item.tracklist, let decoded = try? JSONDecoder().decode([DiscogsTrack].self, from: data) {
+                    tracks = decoded
+                } else {
+                    tracks = []
+                }
                 return
             }
         }
@@ -1134,6 +1155,9 @@ struct AddRecordView: View {
     @State private var identifierNoResultAlert = false
     @State private var showDuplicateSummary = false
     @State private var duplicateSummaryMessage = ""
+
+    // Discogs configured?
+    private var isDiscogsConfigured: Bool { !API.discogsToken.isEmpty }
     
     var hasValidRecordsToSave: Bool {
         if isManualEntry {
@@ -1161,6 +1185,16 @@ struct AddRecordView: View {
                         Text("Manual Entry").tag(true)
                     }
                     .pickerStyle(SegmentedPickerStyle())
+                }
+
+                if !isDiscogsConfigured {
+                    HStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(.orange)
+                        Text("Discogs lookups disabled: missing API token")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
                 
                 if isManualEntry {
