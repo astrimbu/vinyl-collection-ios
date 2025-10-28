@@ -6,6 +6,10 @@
 	<string>$(GOOGLE_CLIENT_ID)</string>
 	<key>GOOGLE_REDIRECT_URI</key>
 	<string>$(GOOGLE_REDIRECT_URI)</string>
+	<key>DISCOGS_CONSUMER_KEY</key>
+	<string>$(DISCOGS_CONSUMER_KEY)</string>
+	<key>DISCOGS_CONSUMER_SECRET</key>
+	<string>$(DISCOGS_CONSUMER_SECRET)</string>
 	<key>UIFileSharingEnabled</key>
 	<true/>
 	<key>GOOGLE_CLIENT_SECRET</key>
@@ -16,5 +20,16 @@
 	<string>Allow Vinyls to access your photos to set album artwork.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Allow Vinyls to save album artwork images to your Photos.</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.vinyls.app</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>vinyls</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

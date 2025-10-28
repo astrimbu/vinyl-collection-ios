@@ -13,6 +13,9 @@ struct VinylsApp: App {
         WindowGroup {
             ContentView()
                 .environment(\.managedObjectContext, persistenceController.container.viewContext)
+                .onOpenURL { url in
+                    DiscogsAuthService.shared.handleOpenURL(url)
+                }
         }
     }
 }

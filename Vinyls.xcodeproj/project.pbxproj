@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		E65B01BC2D97795300BF0024 /* .env in Resources */ = {isa = PBXBuildFile; fileRef = E65B01BB2D97795300BF0024 /* .env */; };
+		E65FFD0C2EB027DD006C67F7 /* OAuthSwift in Frameworks */ = {isa = PBXBuildFile; productRef = E65FFD0B2EB027DD006C67F7 /* OAuthSwift */; };
 		E6F88D312E00AF5900D94F9A /* Secrets.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = E6F88D302E00AF5800D94F9A /* Secrets.xcconfig */; };
 		E6F88D322E00AF5900D94F9A /* Secrets.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = E6F88D302E00AF5800D94F9A /* Secrets.xcconfig */; };
 		E6F88D332E00AF5900D94F9A /* Secrets.xcconfig in Resources */ = {isa = PBXBuildFile; fileRef = E6F88D302E00AF5800D94F9A /* Secrets.xcconfig */; };
@@ -74,6 +75,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				E65FFD0C2EB027DD006C67F7 /* OAuthSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -136,6 +138,7 @@
 			);
 			name = Vinyls;
 			packageProductDependencies = (
+				E65FFD0B2EB027DD006C67F7 /* OAuthSwift */,
 			);
 			productName = Vinyls;
 			productReference = E64F09142D8CA7E200B5DABE /* Vinyls.app */;
@@ -219,6 +222,9 @@
 			);
 			mainGroup = E64F090B2D8CA7E200B5DABE;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				E65FFD0A2EB027DD006C67F7 /* XCRemoteSwiftPackageReference "OAuthSwift" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E64F09152D8CA7E200B5DABE /* Products */;
 			projectDirPath = "";
@@ -590,6 +596,25 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		E65FFD0A2EB027DD006C67F7 /* XCRemoteSwiftPackageReference "OAuthSwift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/OAuthSwift/OAuthSwift";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.2.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		E65FFD0B2EB027DD006C67F7 /* OAuthSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = E65FFD0A2EB027DD006C67F7 /* XCRemoteSwiftPackageReference "OAuthSwift" */;
+			productName = OAuthSwift;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = E64F090C2D8CA7E200B5DABE /* Project object */;
 }

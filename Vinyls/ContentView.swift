@@ -15,6 +15,7 @@ import CoreData
 struct ContentView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @StateObject private var googleSheetsService = GoogleSheetsService()
+    @StateObject private var discogsAuth = DiscogsAuthService.shared
     @State private var showingAddRecordSheet = false
     @State private var showingImportCSVSheet = false
     @State private var showingDeleteAllConfirmation = false
@@ -75,7 +76,7 @@ struct ContentView: View {
 
     // Credential availability checks
     private var isDiscogsConfigured: Bool {
-        !API.discogsToken.isEmpty
+        discogsAuth.isConnected || !API.discogsToken.isEmpty
     }
 
     // Determine section key (first letter) based on current alpha sort key
@@ -305,18 +306,6 @@ struct ContentView: View {
                 .padding(.horizontal)
                 
                 // Records view
-                
-                if !isDiscogsConfigured {
-                    HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.orange)
-                        Text("Discogs lookups disabled: missing API token")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .padding(.horizontal)
-                    .padding(.top, 2)
-                }
                 recordsContent
             }
             .toolbar {
@@ -327,6 +316,21 @@ struct ContentView: View {
                 }
                 ToolbarItem(placement: .navigationBarLeading) {
                     Menu {
+                        // Discogs connection status/actions
+                        if !isDiscogsConfigured {
+                            Button(action: { discogsAuth.connect() }) {
+                                Label("Connect Discogs", systemImage: "link.badge.plus")
+                            }
+                        } else if !discogsAuth.username.isEmpty {
+                            Label("Connected to Discogs (@\(discogsAuth.username))", systemImage: "checkmark.seal.fill")
+                                .foregroundColor(.secondary)
+                            Button(role: .destructive, action: { discogsAuth.disconnect() }) {
+                                Label("Disconnect Discogs", systemImage: "link.slash")
+                            }
+                        }
+                        if !isDiscogsConfigured || !discogsAuth.username.isEmpty {
+                            Divider()
+                        }
                         Button(action: { showingImportCSVSheet = true }) {
                             Label("Import CSV", systemImage: "square.and.arrow.down")
                         }
@@ -340,8 +344,14 @@ struct ContentView: View {
                         Label("More", systemImage: "ellipsis.circle")
                     }
                 }
+                ToolbarItem(placement: .principal) {
+                    Text("Wax Catalog")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                }
             }
-            .navigationTitle("Vinyl Collection")
+            .navigationTitle("")
+            .navigationBarTitleDisplayMode(.inline)
             
             Text("Select a record to view details")
         }
@@ -1129,6 +1139,7 @@ struct AddRecordView: View {
     @Environment(\.managedObjectContext) private var viewContext
     @Binding var isPresented: Bool
     @StateObject private var discogsService = DiscogsService.shared
+    @StateObject private var discogsAuth = DiscogsAuthService.shared
     let onDidAdd: ([Item]) -> Void
     
     @State private var showingBarcodeScanner = false
@@ -1159,7 +1170,7 @@ struct AddRecordView: View {
     @State private var duplicateSummaryMessage = ""
 
     // Discogs configured?
-    private var isDiscogsConfigured: Bool { !API.discogsToken.isEmpty }
+    private var isDiscogsConfigured: Bool { discogsAuth.isConnected || !API.discogsToken.isEmpty }
     
     var hasValidRecordsToSave: Bool {
         if isManualEntry {
@@ -1190,12 +1201,19 @@ struct AddRecordView: View {
                 }
 
                 if !isDiscogsConfigured {
-                    HStack(spacing: 6) {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundColor(.orange)
-                        Text("Discogs lookups disabled: missing API token")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+                    HStack(spacing: 10) {
+                        Image(systemName: "link.badge.plus")
+                            .foregroundColor(.blue)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Connect Discogs")
+                                .font(.subheadline).bold()
+                            Text("Sign in to fetch artwork and tracklists from Discogs.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        Spacer()
+                        Button("Connect") { discogsAuth.connect() }
+                        .buttonStyle(.bordered)
                     }
                 }
                 

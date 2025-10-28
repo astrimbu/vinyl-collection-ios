@@ -2,6 +2,23 @@ import Foundation
 import OSLog
 
 enum API {
+    static var discogsConsumerKey: String {
+        do {
+            let key: String = try Configuration.value(for: "DISCOGS_CONSUMER_KEY")
+            return key
+        } catch {
+            return ""
+        }
+    }
+
+    static var discogsConsumerSecret: String {
+        do {
+            let secret: String = try Configuration.value(for: "DISCOGS_CONSUMER_SECRET")
+            return secret
+        } catch {
+            return ""
+        }
+    }
     static let discogsToken: String = {
         // Compute once to avoid repeated logs on frequent view updates
         #if DEBUG

@@ -41,8 +41,5 @@
     <string>$(GOOGLE_CLIENT_ID)</string>
     <key>GOOGLE_REDIRECT_URI</key>
     <string>$(GOOGLE_REDIRECT_URI)</string>
-
-    <key>DISCOGS_API_TOKEN</key>
-    <string>$(DISCOGS_API_TOKEN)</string>
 </dict>
 </plist> 
