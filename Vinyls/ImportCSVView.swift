@@ -16,24 +16,53 @@ struct ImportCSVView: View {
     var body: some View {
         NavigationView {
             VStack(spacing: 20) {
-                Text("Import your vinyl collection from a CSV file")
-                    .font(.headline)
-                    .multilineTextAlignment(.center)
-                    .padding()
-                
-                Text("The CSV should contain columns for: Artist Name, Title, Identifiers, Notes, Weight, and Dupe")
-                    .font(.subheadline)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal)
-                
-                Text("Example format:")
-                    .font(.subheadline)
-                    .padding(.top)
-                
-                Text("Artist Name,Title,Identifiers,Notes,Dupe,Weight")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .padding(.bottom, 5)
+				VStack(spacing: 4) {
+					Text("Required: Artist or Title")
+						.font(.subheadline)
+						.multilineTextAlignment(.center)
+						.padding(.horizontal)
+					Text("Optional: Identifiers (Cat #), Notes")
+						.font(.footnote)
+						.foregroundColor(.secondary)
+					Text("Other columns are ignored on import")
+						.font(.footnote)
+						.foregroundColor(.secondary)
+					Text("Columns may appear in any order")
+						.font(.footnote)
+						.foregroundColor(.secondary)
+				}
+
+                // Compact example grid
+				VStack(spacing: 8) {
+					LazyVGrid(columns: [
+						GridItem(.flexible(), alignment: .leading),
+						GridItem(.flexible(), alignment: .leading),
+						GridItem(.flexible(), alignment: .leading),
+						GridItem(.flexible(), alignment: .leading)
+					], spacing: 6) {
+						Text("Artist").font(.caption).fontWeight(.semibold)
+						Text("Title").font(.caption).fontWeight(.semibold)
+						Text("Identifiers (Cat #)").font(.caption).fontWeight(.semibold)
+						Text("Notes").font(.caption).fontWeight(.semibold)
+
+						Text("Daft Punk").font(.caption)
+						Text("Discovery").font(.caption)
+						Text("7243 5 27725 1").font(.caption)
+						Text("Gatefold").font(.caption)
+
+						Text("Beyoncé").font(.caption)
+						Text("Renaissance").font(.caption)
+						Text("-").font(.caption)
+						Text("-").font(.caption)
+					}
+				}
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.secondary.opacity(0.25), lineWidth: 1)
+                )
+                .cornerRadius(8)
                 
                 Button(action: {
                     isImporting = true
